@@ -118,6 +118,25 @@ def asset_thumbnail(asset_id):
     return send_file(path, mimetype="image/png", conditional=True)
 
 
+@api.get("/assets/<asset_id>/pyramid")
+def asset_pyramid(asset_id):
+    return ok(service("tiles").pyramid(asset_id))
+
+
+@api.get("/assets/<asset_id>/preview")
+def asset_preview(asset_id):
+    path, record = service("tiles").preview_file(asset_id)
+    return send_file(path, mimetype="image/png", conditional=True,
+                     etag=f"{record['sha256']}-preview", max_age=3600)
+
+
+@api.get("/assets/<asset_id>/tiles/<int:level>/<int:x>/<int:y>")
+def asset_tile(asset_id, level, x, y):
+    path, record = service("tiles").tile_file(asset_id, level, x, y)
+    return send_file(path, mimetype="image/png", conditional=True,
+                     etag=f"{record['sha256']}-{level}-{x}-{y}", max_age=3600)
+
+
 @api.get("/assets/<asset_id>/history")
 def asset_history(asset_id):
     return ok(service("assets").history(asset_id))

@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/media/*
+data/cache/*
 data/exports/*
 data/json/*
 logs/*

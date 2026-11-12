@@ -7,9 +7,10 @@ from .storage import utc_now
 
 
 class DiagnosticsService:
-    def __init__(self, settings, store):
+    def __init__(self, settings, store, tiles=None):
         self.settings = settings
         self.store = store
+        self.tiles = tiles
 
     def dependencies(self):
         versions = {}
@@ -74,6 +75,7 @@ class DiagnosticsService:
         usage = shutil.disk_usage(self.settings.root)
         if usage.free < 512 * 1024 * 1024:
             issues.append({"code": "low_disk_space", "message": "空闲磁盘空间低于 512 MB"})
+        tile_cache = self.tiles.cache_stats() if self.tiles else {"files": 0, "bytes": 0}
         active_jobs = [
             item["id"]
             for item in records["jobs"]
@@ -89,6 +91,8 @@ class DiagnosticsService:
             "tracked_media_count": len(tracked_files),
             "missing_media_count": len(missing_files),
             "orphan_media_count": len(orphans),
+            "tile_cache_files": tile_cache["files"],
+            "tile_cache_bytes": tile_cache["bytes"],
             "disk_total_bytes": usage.total,
             "disk_free_bytes": usage.free,
             "active_jobs": active_jobs,

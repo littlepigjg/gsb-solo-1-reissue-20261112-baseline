@@ -18,6 +18,9 @@
 | DELETE | `/assets/{id}` | 删除没有下游副本且未被活动任务引用的素材 |
 | GET | `/assets/{id}/file` | 读取 PNG 编辑图 |
 | GET | `/assets/{id}/thumbnail` | 读取缩略图 |
+| GET | `/assets/{id}/pyramid` | 图像金字塔元数据：级别、尺寸、瓦片行列数 |
+| GET | `/assets/{id}/preview` | 长边不超过 1024 的预览 PNG（小图或高压缩图直接返回原文件） |
+| GET | `/assets/{id}/tiles/{level}/{x}/{y}` | 指定级别 256px 瓦片 PNG，边缘瓦片按实际尺寸裁剪 |
 | GET | `/assets/{id}/history` | 从原图到当前结果的版本链 |
 | GET | `/assets/{id}/analysis` | 图像直方图、色谱及亮度分析 |
 | POST | `/compare` | 采样误差、PSNR 等比较指标 |
@@ -89,6 +92,10 @@
 ```
 
 支持 `PNG/JPEG/WEBP/BMP/TIFF/GIF`。响应的 `url` 可直接下载。ZIP 接口将 `asset_id` 改为 `asset_ids` 数组，压缩包中包含安全命名的图片和 `manifest.json`。
+
+## 图像金字塔与瓦片
+
+前端查看器按可见区域加载图像，而不是整图展开。流程：先取 `/pyramid` 元数据与 `/preview` 预览图立即可视，再按当前缩放级别与平移位置请求可见瓦片。级别 0 为原始分辨率，级别 N 边长缩小 2^N 倍（向上取整），最小级别恰好容纳于单块瓦片。瓦片与预览在服务端缓存于 `data/cache/`（可再生的派生数据，删除素材时一并清除），并携带 ETag 支持条件请求；级别间下采样使用预乘 Alpha，保证透明边缘颜色准确。处理、导出与“原图对比”仍始终读取 `data/media` 中的完整 PNG。
 
 ## 状态码
 

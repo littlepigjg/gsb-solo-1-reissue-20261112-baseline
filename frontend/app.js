@@ -9,6 +9,7 @@ const state = {
   pipeline: [], presets: [], jobs: [], busy: false, comparing: false,
   selectionToken: 0, libraryToken: 0, exportIds: [], jobPoll: null,
 };
+let viewer = null;
 
 const paths = {
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -227,10 +228,19 @@ async function selectAsset(id, switchView = false) {
   if (token !== state.selectionToken) return;
   state.current = asset;
   state.assetMap.set(id, asset);
-  $("#preview-image").src = asset.url;
   $("#preview-image").alt = asset.name;
   $("#empty-state").hidden = true;
   $("#image-stage").hidden = false;
+  $("#viewer-toolbar").hidden = false;
+  $("#viewer-metrics").hidden = false;
+  if (viewer) {
+    viewer.setAsset({
+      id: asset.id,
+      name: asset.name,
+      bytes: asset.bytes,
+      previewUrl: `/api/assets/${asset.id}/preview`,
+    });
+  }
   $("#active-name").textContent = asset.name;
   $("#active-kind").textContent = asset.kind === "result" ? "副本" : asset.kind === "sample" ? "示例" : "原图";
   $("#image-meta").textContent = `${asset.width} × ${asset.height} px · ${humanBytes(asset.bytes)} · ${asset.format}`;
@@ -245,17 +255,42 @@ async function selectAsset(id, switchView = false) {
   const root = asset.root_id === id ? asset : state.assetMap.get(asset.root_id) || await api(`/assets/${asset.root_id}`);
   if (token !== state.selectionToken) return;
   state.root = root;
-  $("#original-image").src = root.url;
   if (state.panel === "info") await loadAnalysis();
 }
 
 function setComparison(enabled) {
   state.comparing = enabled;
+  if (enabled) {
+    $("#preview-image").src = state.current.url;
+    $("#original-image").src = state.root.url;
+  } else {
+    $("#preview-image").removeAttribute("src");
+    $("#original-image").removeAttribute("src");
+  }
+  $("#preview-image").hidden = !enabled;
+  $("#viewer-canvas").hidden = enabled;
+  $("#viewer-toolbar").hidden = enabled;
   $("#original-layer").hidden = !enabled;
   $("#comparison-line").hidden = !enabled;
   $("#comparison-labels").hidden = !enabled;
   $("#comparison-control").hidden = !enabled;
   $("#compare-button").setAttribute("aria-pressed", String(enabled));
+}
+
+function renderViewerMetrics(metrics) {
+  if (!state.current) return;
+  const percent = metrics.fullBytes ? Math.round(metrics.receivedBytes / metrics.fullBytes * 100) : 0;
+  $("#metrics-summary").textContent = `本次查看接收 ${humanBytes(metrics.receivedBytes)} · 完整原图 ${humanBytes(metrics.fullBytes)} 的 ${percent}%`;
+  $("#zoom-label").textContent = `${Math.round(metrics.zoom * 100)}%`;
+  const rows = [
+    ["可见区域瓦片", `${metrics.needed} 块`],
+    ["已缓存瓦片", `${metrics.cachedTiles} 块 · 解码约 ${humanBytes(metrics.cachedPixels * 4)}`],
+    ["已回收瓦片", `${metrics.evictedTiles} 块（移出可见区且超出预算）`],
+    ["正在加载", `${metrics.inflight} 块`],
+    ["当前清晰度级别", `L${metrics.level}`],
+    ["本次会话累计接收", humanBytes(metrics.totalReceivedBytes)],
+  ];
+  $("#metrics-detail-list").innerHTML = rows.map(([key, value]) => `<dt>${key}</dt><dd>${value}</dd>`).join("");
 }
 
 async function processSteps(steps) {
@@ -364,7 +399,10 @@ function confirmDelete(id) {
         state.current = null;
         state.root = null;
         state.selectionToken += 1;
+        if (viewer) viewer.reset();
         $("#image-stage").hidden = true;
+        $("#viewer-toolbar").hidden = true;
+        $("#viewer-metrics").hidden = true;
         $("#empty-state").hidden = false;
         $("#active-name").textContent = "尚未选择图片";
         $("#image-meta").textContent = "等待导入图片";
@@ -586,6 +624,10 @@ function bindEvents() {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await $("#canvas-area").requestFullscreen();
   });
+  on("#zoom-in", "click", () => viewer?.zoomStep(1.4));
+  on("#zoom-out", "click", () => viewer?.zoomStep(1 / 1.4));
+  on("#zoom-fit", "click", () => viewer?.zoomFit());
+  on("#zoom-actual", "click", () => viewer?.zoomActual());
   on("#demo-button", "click", async () => {
     const samples = await api("/samples", { method: "POST", body: {} });
     rememberAssets(samples); await selectAsset(samples[0].id); await refreshStats(); toast("示例素材已就绪，试试调色或滤镜", "info");
@@ -646,6 +688,11 @@ function bindEvents() {
 
 async function bootstrap() {
   hydrateIcons();
+  viewer = new TileViewer($("#image-stage"), $("#viewer-canvas"), {
+    api,
+    onMetrics: renderViewerMetrics,
+    onError: message => toast(message, "error"),
+  });
   const [catalog, config, library, presets] = await Promise.all([api("/catalog"), api("/config"), api("/assets?limit=60"), api("/presets")]);
   Object.assign(state, { catalog, config, presets, assets: library.items, assetTotal: library.total });
   rememberAssets(library.items);

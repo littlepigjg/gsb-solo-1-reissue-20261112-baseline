@@ -8,6 +8,7 @@
   <title>光屿 · 图像工作室</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/viewer.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -45,11 +46,12 @@
             <div id="canvas-area" class="canvas-area">
               <div class="canvas-corner tl"></div><div class="canvas-corner tr"></div><div class="canvas-corner bl"></div><div class="canvas-corner br"></div>
               <div id="empty-state" class="empty-state"><div class="empty-icon" data-icon="image"></div><h2>你的下一幅作品，从这里开始</h2><p>拖入图片，或选择本地文件</p><button id="empty-upload" class="button dark">选择图片</button><small>PNG / JPG / WebP / BMP / TIFF / GIF · 最大 24 MB</small></div>
-              <div id="image-stage" class="image-stage" hidden><img id="preview-image" alt="当前图像处理结果"><div id="original-layer" class="original-layer" hidden><img id="original-image" alt="最初导入的原图"></div><div id="comparison-line" class="comparison-line" hidden><span>↔</span></div><div id="comparison-labels" class="comparison-labels" hidden><span>原图</span><span>当前结果</span></div></div>
+              <div id="image-stage" class="image-stage" hidden><canvas id="viewer-canvas" role="img" aria-label="图像查看器"></canvas><img id="preview-image" alt="当前图像处理结果" hidden><div id="viewer-toolbar" class="viewer-toolbar" hidden><button id="zoom-out" title="缩小" aria-label="缩小">−</button><span id="zoom-label">100%</span><button id="zoom-in" title="放大" aria-label="放大">＋</button><button id="zoom-fit" title="适应画布">适应</button><button id="zoom-actual" title="实际像素">1:1</button></div><div id="original-layer" class="original-layer" hidden><img id="original-image" alt="最初导入的原图"></div><div id="comparison-line" class="comparison-line" hidden><span>↔</span></div><div id="comparison-labels" class="comparison-labels" hidden><span>原图</span><span>当前结果</span></div></div>
               <div id="canvas-busy" class="canvas-busy" hidden><span class="spinner"></span><strong>正在处理画面</strong><small>完成后将保留一个新的处理副本</small></div>
             </div>
             <div id="comparison-control" class="comparison-control" hidden><label for="comparison-range">原图</label><input id="comparison-range" type="range" min="0" max="100" value="50" aria-label="原图对比位置"><span>处理结果</span></div>
-            <div class="canvas-footer"><div id="image-meta">等待导入图片</div><div><span class="tiny-dot"></span><span id="save-status">原图始终保留</span><span class="divider">|</span><span>适应画布</span></div></div>
+            <div class="canvas-footer"><div id="image-meta">等待导入图片</div><div><span class="tiny-dot"></span><span id="save-status">原图始终保留</span><span class="divider">|</span><span>滚轮缩放 · 拖动平移 · 双击放大</span></div></div>
+            <div id="viewer-metrics" class="viewer-metrics" hidden><span class="tiny-dot"></span><span id="metrics-summary">按可见区域加载</span><details class="metrics-details"><summary>加载与占用</summary><dl id="metrics-detail-list" class="metrics-grid"></dl></details><span class="divider">|</span><span>处理与导出始终使用完整原图</span></div>
             <div class="filmstrip-heading"><span>最近的画面</span><button id="show-library" class="text-button">查看素材库 <span>↗</span></button></div>
             <div id="filmstrip" class="filmstrip"></div>
           </section>

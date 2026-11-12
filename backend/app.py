@@ -9,6 +9,7 @@ from .settings import Settings, PROJECT_ROOT
 from .storage import JsonStore
 from .registry import Registry
 from .assets import AssetService
+from .tiles import TileService
 from .processing import ProcessingService
 from .jobs import JobService
 from .exports import ExportService
@@ -25,6 +26,8 @@ def create_app(data_dir=None, testing=False):
     store = JsonStore(settings.database)
     registry = Registry()
     assets = AssetService(settings, store)
+    tiles = TileService(settings, assets)
+    assets.after_delete.append(tiles.discard)
     processing = ProcessingService(settings, store, assets, registry)
     jobs = JobService(settings, store, assets, processing)
     exports = ExportService(settings, store, assets, processing)
@@ -34,13 +37,14 @@ def create_app(data_dir=None, testing=False):
         "store": store,
         "registry": registry,
         "assets": assets,
+        "tiles": tiles,
         "processing": processing,
         "jobs": jobs,
         "exports": exports,
         "presets": presets,
         "analysis": AnalysisService(assets),
         "samples": SampleService(assets, store),
-        "diagnostics": DiagnosticsService(settings, store),
+        "diagnostics": DiagnosticsService(settings, store, tiles),
     }
     app = Flask(__name__, root_path=".", static_folder=str(PROJECT_ROOT / "frontend"), static_url_path="/static")
     app.config.update(

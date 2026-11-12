@@ -16,6 +16,7 @@ class AssetService:
         self.settings = settings
         self.store = store
         self.lock = threading.RLock()
+        self.after_delete = []
 
     def _file(self, asset_id, thumbnail=False):
         identifier(asset_id)
@@ -151,6 +152,8 @@ class AssetService:
             self.store.delete("assets", asset_id)
             self._file(asset_id).unlink(missing_ok=True)
             self._file(asset_id, True).unlink(missing_ok=True)
+            for hook in self.after_delete:
+                hook(asset_id)
             self.store.event("delete", f"删除 {record['name']}")
 
     def history(self, asset_id):
