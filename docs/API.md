@@ -30,8 +30,9 @@
 | DELETE | `/presets/{id}` | 删除自定义预设 |
 | GET | `/jobs` | 最近 100 条批量任务 |
 | POST | `/jobs` | 提交后台批处理，返回 202 |
-| GET | `/jobs/{id}` | 查询状态和进度 |
+| GET | `/jobs/{id}` | 查询状态、逐张结果与进度 |
 | POST | `/jobs/{id}/cancel` | 申请取消，body 为 `{}` |
+| POST | `/jobs/{id}/resume` | 继续未完成图片，返回 202 |
 | POST | `/exports` | 单图实际格式编码 |
 | POST | `/exports/archive` | 多图编码并生成 ZIP |
 | GET | `/exports/{id}/download` | 下载导出产物 |
@@ -69,9 +70,18 @@
 }
 ```
 
-任务状态：`queued → running → completed / partial / failed`。取消使用 `cancelling → cancelled`。服务重启后，未完成任务变为 `interrupted`。批内每张图片独立保存，失败不会阻止后续图片处理。
+任务状态：`queued → running → completed / partial / failed / interrupted`。取消使用 `cancelling → cancelled`。服务停止或重启后，未完成任务变为 `interrupted` 并保留已保存结果，可调用 `resume` 继续剩余图片。
 
-`results` 保存成功素材的 id；`errors` 保存失败图片 id 和原因；`progress` 为 0–100；`done/total` 表示完成尝试的图片数量。取消时保留已完成结果。
+`items` 是逐张的权威记录：每项包含 `source_id`、`status`（`success` / `failed` / `unknown` / `pending` / `running`）、`result_id` 与失败原因。`results` 只包含 `status == "success"` 且结果素材仍存在的图片；`errors` 包含 `failed` 和 `unknown`；`succeeded`、`failed`、`unknown`、`pending`、`done/total` 分别计数。`progress` 为 0–100。
+
+## 中断恢复
+
+- 每个批次结果的素材元数据都写入 `metadata.job = {id, source_id, steps_sha256, index}`，恢复只按这个批次 ID + 来源图片 ID + 步骤指纹认领结果，不按名称、时间或文件名推断。
+- 服务在“结果已保存、进度未写入”时退出，重启会对账并认领该输出；`items` 仍为 `running`、但结果素材确实属于本批次且来源一致时，标记成功而不重复生成。
+- 未写入结果的项目恢复为 `pending`，`resumable: true`；服务在“进度已更新、结果未保存”时退出也不会错误标记完成。
+- `unknown` 表示旧记录缺少逐张状态且无法证明结果归属，或同一来源出现多个候选副本；此时 `recovery_state` 为 `unverified` / `conflict`，`resumable: false`，页面会明确提示，需人工核对素材库。
+- 已到达 `cancelled` 的任务不会在重启或 `resume` 后自动复活；`resume` 返回 409。
+- `resume` 是幂等的：重复继续不会重复发布同一项输出，每次继续先重新对账再处理剩余项。
 
 ## 导出请求
 

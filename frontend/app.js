@@ -464,13 +464,35 @@ async function refreshJobs() {
   $("#job-count").textContent = active.length;
 }
 
+function jobItemSummary(job) {
+  const items = Array.isArray(job.items) ? job.items : [];
+  if (!items.length) return "";
+  const counts = items.reduce((totals, item) => {
+    const key = item.status === "success" ? "成功" : item.status === "failed" ? "失败" : item.status === "unknown" ? "无法确认" : "未完成";
+    totals[key] = (totals[key] || 0) + 1;
+    return totals;
+  }, {});
+  return Object.entries(counts).map(([key, value]) => `${key} ${value}`).join(" · ");
+}
+
 function renderJobs() {
   const statusNames = { queued: "排队中", running: "处理中", cancelling: "取消中", completed: "已完成", partial: "部分完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" };
-  $("#jobs-list").innerHTML = state.jobs.length ? state.jobs.map(job => `
-    <article class="job-card"><div class="job-card-head"><h3>${escapeHtml(job.title)}</h3><span class="job-status ${job.status}">${statusNames[job.status]}</span></div><div class="job-progress"><div style="width:${job.progress}%"></div></div><p>${escapeHtml(job.message)} · ${job.done}/${job.total} 张 · ${job.steps.length} 个步骤</p>${job.errors.length ? `<details class="job-errors"><summary>${job.errors.length} 个处理错误</summary>${job.errors.map(error => `<p>${escapeHtml(error.message)}</p>`).join("")}</details>` : ""}<div class="job-card-foot"><span>${new Date(job.created_at).toLocaleString("zh-CN", { hour12: false })}</span><div>${["queued", "running"].includes(job.status) ? `<button class="text-button" data-cancel-job="${job.id}">取消任务</button>` : ""}${job.results.length ? `<button class="text-button" data-job-results="${job.id}">查看结果 ↗</button> <button class="text-button" data-job-export="${job.id}">打包导出</button>` : ""}</div></div></article>`).join("") : '<div class="empty-hint">还没有批量任务。<br>选择图片与流程，开始第一组创作。</div>';
+  $("#jobs-list").innerHTML = state.jobs.length ? state.jobs.map(job => {
+    const itemSummary = jobItemSummary(job);
+    const canResume = job.resumable && ["interrupted", "partial", "failed"].includes(job.status);
+    const unresolved = ["unverified", "conflict"].includes(job.recovery_state || (job.recovery || {}).state);
+    const errors = Array.isArray(job.errors) ? job.errors : [];
+    return `<article class="job-card"><div class="job-card-head"><h3>${escapeHtml(job.title)}</h3><span class="job-status ${job.status}">${statusNames[job.status] || job.status}</span></div><div class="job-progress"><div style="width:${job.progress}%"></div></div><p>${escapeHtml(job.message)} · ${job.done}/${job.total} 张 · ${job.steps.length} 个步骤</p>${itemSummary ? `<p class="job-item-summary">${escapeHtml(itemSummary)}</p>` : ""}${unresolved ? `<p class="job-recovery">${escapeHtml(job.recovery_message || (job.recovery || {}).message || "已有结果无法确认，请先核对素材库。")}</p>` : ""}${errors.length ? `<details class="job-errors"><summary>${errors.length} 个未成功条目</summary>${errors.map(error => `<p>${escapeHtml(error.message)}</p>`).join("")}</details>` : ""}<div class="job-card-foot"><span>${new Date(job.created_at).toLocaleString("zh-CN", { hour12: false })}</span><div>${canResume ? `<button class="text-button" data-resume-job="${job.id}">继续剩余图片</button> ` : ""}${["queued", "running", "cancelling"].includes(job.status) ? `<button class="text-button" data-cancel-job="${job.id}">取消任务</button> ` : ""}${job.results.length ? `<button class="text-button" data-job-results="${job.id}">查看结果 ↗</button> <button class="text-button" data-job-export="${job.id}">打包导出</button>` : ""}</div></div></article>`;
+  }).join("") : '<div class="empty-hint">还没有批量任务。<br>选择图片与流程，开始第一组创作。</div>';
   $$("[data-cancel-job]").forEach(button => button.addEventListener("click", async () => {
     try { await api(`/jobs/${button.dataset.cancelJob}/cancel`, { method: "POST", body: {} }); await refreshJobs(); }
     catch (error) { toast(error.message, "error"); }
+  }));
+  $$("[data-resume-job]").forEach(button => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try { await api(`/jobs/${button.dataset.resumeJob}/resume`, { method: "POST", body: {} }); await refreshJobs(); refreshStats().catch(() => {}); }
+    catch (error) { toast(error.message, "error"); }
+    finally { button.disabled = false; }
   }));
   $$("[data-job-results]").forEach(button => button.addEventListener("click", async () => {
     try {
@@ -669,8 +691,8 @@ async function bootstrap() {
       const previous = new Map(state.jobs.map(job => [job.id, job.status]));
       await refreshJobs();
       for (const job of state.jobs) {
-        if (["completed", "partial", "failed"].includes(job.status) && ["queued", "running", "cancelling"].includes(previous.get(job.id))) {
-          toast(`“${job.title}”：${job.message}`, job.status === "failed" ? "error" : "success");
+        if (["completed", "partial", "failed", "cancelled", "interrupted"].includes(job.status) && ["queued", "running", "cancelling"].includes(previous.get(job.id))) {
+          toast(`“${job.title}”：${job.message}`, job.status === "completed" ? "success" : job.status === "interrupted" ? "info" : "error");
           await refreshStats();
         }
       }

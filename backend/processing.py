@@ -1,9 +1,16 @@
 """Validated non-destructive processing pipelines shared by UI and jobs."""
+import hashlib
+import json
 import threading
 import time
 from .registry import OperationContext
 from .errors import StudioError
 from .validation import text_value
+
+
+def pipeline_sha256(steps):
+    payload = json.dumps(steps, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class ProcessingService:
@@ -33,12 +40,28 @@ class ProcessingService:
                 progress(index + 1, len(steps))
         return image, timings
 
-    def process(self, asset_id, steps, name=None, progress=None, cancelled=None):
+    def process(self, asset_id, steps, name=None, progress=None, cancelled=None, job=None):
         steps = self.validate(steps)
         if name is not None:
             name = text_value(name, "结果名称", 180, 1)
         started = time.perf_counter()
+        job_metadata = None
+        if job:
+            job_metadata = {
+                "id": job["job_id"],
+                "source_id": job["source_id"],
+                "steps_sha256": pipeline_sha256(steps),
+                "index": job.get("item_index"),
+            }
         with self.compute_lock, self.assets.lock:
+            if job_metadata:
+                existing = self.assets.linked_result(
+                    job_metadata["id"],
+                    job_metadata["source_id"],
+                    job_metadata["steps_sha256"],
+                )
+                if existing is not None:
+                    return existing
             image, parent = self.assets.load(asset_id)
             image, timings = self.apply_steps(image, steps, progress, cancelled)
             if cancelled and cancelled():
@@ -47,15 +70,18 @@ class ProcessingService:
             if name is None:
                 base = parent["name"].rsplit(".", 1)[0][:100]
                 name = f"{base} · {last['title']}"
+            metadata = {
+                "timings": timings,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+            }
+            if job_metadata:
+                metadata["job"] = job_metadata
             result = self.assets.save(
                 image,
                 name=name,
                 parent=parent,
                 steps=steps,
-                metadata={
-                    "timings": timings,
-                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
-                },
+                metadata=metadata,
             )
         self.store.event("process", f"完成 {name}", {
             "source_id": asset_id,

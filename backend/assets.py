@@ -107,6 +107,30 @@ class AssetService:
             finally:
                 temporary.unlink(missing_ok=True)
 
+    def linked_result(self, job_id, source_id, steps_sha256):
+        """Return the single result this batch already saved for one source.
+
+        Provenance comes from the asset's own metadata and parent link, never
+        from a similar name or a nearby timestamp. More than one match is
+        ambiguous and reported as a conflict instead of being claimed.
+        """
+        matches = []
+        for record in self.store.all("assets"):
+            metadata = record.get("metadata") or {}
+            job = metadata.get("job") if isinstance(metadata.get("job"), dict) else {}
+            if job.get("id") != job_id or job.get("source_id") != source_id:
+                continue
+            if steps_sha256 and job.get("steps_sha256") not in {None, steps_sha256}:
+                continue
+            if record.get("parent_id") != source_id:
+                continue
+            matches.append(record)
+        if not matches:
+            return None
+        if len(matches) > 1:
+            raise Conflict("同一批次图片已有多个结果副本，请先核对素材库再继续")
+        return self.public(matches[0])
+
     def load(self, asset_id):
         with self.lock:
             record = self.get(asset_id)

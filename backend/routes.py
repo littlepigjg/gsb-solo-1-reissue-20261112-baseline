@@ -196,6 +196,12 @@ def job_cancel(job_id):
     return ok(service("jobs").cancel(job_id))
 
 
+@api.post("/jobs/<job_id>/resume")
+def job_resume(job_id):
+    payload(set())
+    return ok(service("jobs").resume(job_id), 202)
+
+
 @api.post("/exports")
 def export_create():
     data = payload({"asset_id", "options"})

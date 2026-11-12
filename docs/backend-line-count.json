@@ -1,9 +1,9 @@
 {
   "scope": "backend/**/*.py only; excludes frontend, tests, scripts, run.py and dependencies",
   "files": 35,
-  "physical_lines": 5574,
-  "nonblank_noncomment_lines": 5114,
-  "code_lines_excluding_docstrings": 5074,
+  "physical_lines": 6211,
+  "nonblank_noncomment_lines": 5704,
+  "code_lines_excluding_docstrings": 5644,
   "modules": [
     {
       "file": "backend/__init__.py",
@@ -25,9 +25,9 @@
     },
     {
       "file": "backend/assets.py",
-      "physical_lines": 167,
-      "nonblank_noncomment_lines": 153,
-      "code_lines_excluding_docstrings": 152
+      "physical_lines": 191,
+      "nonblank_noncomment_lines": 175,
+      "code_lines_excluding_docstrings": 169
     },
     {
       "file": "backend/catalog/__init__.py",
@@ -115,9 +115,9 @@
     },
     {
       "file": "backend/jobs.py",
-      "physical_lines": 161,
-      "nonblank_noncomment_lines": 147,
-      "code_lines_excluding_docstrings": 146
+      "physical_lines": 742,
+      "nonblank_noncomment_lines": 687,
+      "code_lines_excluding_docstrings": 671
     },
     {
       "file": "backend/operations/__init__.py",
@@ -175,9 +175,9 @@
     },
     {
       "file": "backend/processing.py",
-      "physical_lines": 80,
-      "nonblank_noncomment_lines": 73,
-      "code_lines_excluding_docstrings": 71
+      "physical_lines": 106,
+      "nonblank_noncomment_lines": 97,
+      "code_lines_excluding_docstrings": 95
     },
     {
       "file": "backend/registry.py",
@@ -187,9 +187,9 @@
     },
     {
       "file": "backend/routes.py",
-      "physical_lines": 229,
-      "nonblank_noncomment_lines": 158,
-      "code_lines_excluding_docstrings": 157
+      "physical_lines": 235,
+      "nonblank_noncomment_lines": 162,
+      "code_lines_excluding_docstrings": 161
     },
     {
       "file": "backend/samples.py",

@@ -52,8 +52,8 @@ Flask 路由与错误边界
 
 | 集合 | 主要字段 |
 | --- | --- |
-| assets | name、kind、width、height、sha256、parent_id、root_id、steps、metadata |
-| jobs | title、asset_ids、steps、status、progress、results、errors |
+| assets | name、kind、width、height、sha256、parent_id、root_id、steps、metadata、metadata.job（批次来源） |
+| jobs | title、asset_ids、steps、status、items（逐张状态）、results、errors、progress、resumable、recovery |
 | presets | name、description、steps、readonly、builtin_key |
 | events | action、message、details |
 | exports | filename、download_name、asset_ids、options、kind、bytes |
@@ -64,7 +64,9 @@ Flask 路由与错误边界
 
 ## 任务与资源控制
 
-同步处理与后台任务共享计算锁，避免多个大图算法同时占用内存。批量工作线程串行处理图片，步骤结束后写入进度；用户取消由线程事件传递，在下一个步骤边界或保存前生效。
+同步处理与后台任务共享计算锁，避免多个大图算法同时占用内存。批量工作线程串行处理图片，每张图片的状态（待处理、处理中、成功、失败、无法确认）逐项写入 JSON；用户取消由线程事件传递，在下一个步骤边界或保存前生效。
+
+恢复采用“对账”而不是“猜测”：结果素材在保存时写入 `metadata.job`，记录批次 ID、来源图片 ID 与步骤指纹。服务启动时对每条未完成任务重新核对其 `items` 与素材库：能唯一证明属于本批次且来源一致的结果标记成功；已写入结果记录但素材已被删除的项退回待处理；无法证明归属或存在多个候选副本的项标记 `unknown` 并停止自动继续，避免重复发布。旧版没有 `items` 的任务只采纳其 `results` 中素材仍然存在且 `parent_id` 与来源一致的项目，其余明确标为无法确认。`resume` 先对账再处理剩余项，且已取消的任务不会被复活。
 
 默认限制 1,600 万像素、单边 8,192、单文件 24 MB、每批 24 图和每流程 12 步。几何算法在分配新画布前检查目标尺寸。图像诊断缩小到最多 768×768 再计算统计量。
 
@@ -75,4 +77,5 @@ Flask 路由与错误边界
 3. HTTP 测试验证真实编码文件能够重新解码，检查 PNG/JPEG/WebP/BMP/TIFF/GIF。
 4. 测试多步流程、原图不变、历史、ZIP、预设、批次完成/失败/取消。
 5. 测试 JSON 并发写入、损坏恢复及重启后数据和任务状态。
-6. 浏览器实际执行编辑、原图对比、JPEG 导出与批量流程。
+6. 测试中断恢复：结果已保存但进度未写入时重启认领、结果未保存时退回待处理、重复继续不重复发布、已取消任务不复活、旧记录无法确认时明确说明。
+7. 浏览器实际执行编辑、原图对比、JPEG 导出与批量流程。
