@@ -3,7 +3,8 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from .errors import StudioError, Conflict
-from .validation import identifier, list_value, text_value
+from .validation import identifier, list_value, text_value, object_value, reject_unknown
+from .dynamic import normalize_snapshot, verify_snapshot
 from .storage import utc_now
 
 
@@ -30,7 +31,7 @@ class JobService:
                     "message": "服务重启中断了任务；已完成的结果仍然保留，可重新提交。",
                 })
 
-    def submit(self, asset_ids, steps, title="批量图像处理"):
+    def submit(self, asset_ids, steps, title="批量图像处理", snapshots=None):
         asset_ids = list_value(asset_ids, "图片列表", maximum=self.settings.max_batch)
         asset_ids = list(dict.fromkeys(identifier(value) for value in asset_ids))
         steps = self.processing.validate(steps)
@@ -38,6 +39,15 @@ class JobService:
         with self.assets.lock, self.lock:
             for asset_id in asset_ids:
                 self.assets.get(asset_id)
+            if snapshots is None:
+                snapshots = self.processing.snapshots(asset_ids)
+            else:
+                object_value(snapshots, "素材快照")
+                reject_unknown(snapshots, set(asset_ids), "素材快照")
+                snapshots = {
+                    asset_id: verify_snapshot(normalize_snapshot(snapshots[asset_id]), self.assets.get(asset_id))
+                    for asset_id in asset_ids
+                }
             active = [job for job in self.store.all("jobs") if job["status"] in ACTIVE]
             if len(active) >= 4:
                 raise Conflict("最多允许 4 个等待或运行中的任务")
@@ -45,6 +55,7 @@ class JobService:
                 "title": title,
                 "asset_ids": asset_ids,
                 "steps": steps,
+                "snapshots": snapshots,
                 "status": "queued",
                 "total": len(asset_ids),
                 "done": 0,
@@ -91,11 +102,11 @@ class JobService:
             def progress(completed, total):
                 percentage = (index + completed / total) / record["total"] * 100
                 self.store.update("jobs", job_id, {"progress": round(percentage, 1)})
-
             try:
                 result = self.processing.process(
                     asset_id,
                     record["steps"],
+                    snapshot=(record.get("snapshots") or {}).get(asset_id),
                     progress=progress,
                     cancelled=cancellation.is_set,
                 )

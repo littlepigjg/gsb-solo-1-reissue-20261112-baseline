@@ -9,8 +9,9 @@ HTML / CSS / JavaScript
 Flask 路由与错误边界
         │
         ├── AssetService ── 图片校验 / EXIF 归一化 / PNG 与缩略图
+        ├── Processing ──── 有序执行 / 动态规则解析 / 新副本和溯源
+        ├── Expressions ─── 白名单变量与函数的安全表达式求值
         ├── Registry ────── 参数协议 / 严格校验 / 算法注册
-        ├── Processing ──── 有序执行 / 资源限制 / 新副本和溯源
         ├── JobService ──── 单工作线程 / 进度 / 取消 / 重启恢复
         ├── ExportService ─ 实际格式编码 / ZIP 打包
         ├── Analysis ────── 采样直方图 / 色谱 / 误差分析
@@ -37,7 +38,13 @@ Flask 路由与错误边界
 
 `catalog/` 文件是运行时直接使用的 Python 源码，包含每个操作的描述、算法、参数类型、默认值、范围、步进、选项、帮助文本和示例请求。`scripts/generate_catalog.py` 是维护这些定义的编译工具。
 
-## 存储模型
+## 动态规则与快照
+
+预设与单图流程都可带 `rules`：每条规则有 `when` 条件与 `params` 覆盖值，值可以是固定值或 `{"$expr": ...}`。解析发生在每个步骤执行前，`width`/`height`/`orientation` 来自该步骤的输入图（前一步的结果），`source.*` 来自提交时快照。
+
+`expressions.py` 是一个独立的小型解析器：只识别数字、文本、白名单变量、比较/布尔/算术运算和固定函数集。没有属性访问、下标、导入、文件 API 或动态调用，因此规则不会变成任意代码执行。求值结果的类型错误、除零、未知变量都转化为 `rule_error`。
+
+解析后的值仍经过 `validate_parameters`，并带有来源信息；任一参数越界时错误会指出步骤、规则、参数与表达式。批量任务在提交时把每张源图的名称、标签、宽高与类型写入 `snapshots`，执行时只使用这份快照，因此之后改名、改标签或重新保存预设都不会改变已排队批次。`/resolve` 用同一套解析逻辑先计算输出尺寸与命中的规则，页面据此逐张预览。
 
 每个集合保存为：
 
@@ -53,8 +60,8 @@ Flask 路由与错误边界
 | 集合 | 主要字段 |
 | --- | --- |
 | assets | name、kind、width、height、sha256、parent_id、root_id、steps、metadata |
-| jobs | title、asset_ids、steps、status、progress、results、errors |
-| presets | name、description、steps、readonly、builtin_key |
+| jobs | title、asset_ids、steps、snapshots、status、progress、results、errors |
+| presets | name、description、steps（可含 rules）、readonly、builtin_key |
 | events | action、message、details |
 | exports | filename、download_name、asset_ids、options、kind、bytes |
 

@@ -22,7 +22,8 @@
 | GET | `/assets/{id}/analysis` | 图像直方图、色谱及亮度分析 |
 | POST | `/compare` | 采样误差、PSNR 等比较指标 |
 | POST | `/process` | 执行流程并保存新副本 |
-| POST | `/preview` | 执行流程并返回临时 PNG，不写入素材库 |
+| POST | `/preview` | 执行流程并返回临时 PNG，不写入素材库；响应头 `X-Studio-Dynamic` 列出命中的规则 |
+| POST | `/resolve` | 只计算每步参数与输出尺寸，不渲染图片；用于批量逐张预览 |
 | POST | `/samples` | 幂等生成三个示例素材，body 为 `{}` |
 | GET | `/presets` | 列出内置与自定义预设 |
 | POST | `/presets` | 创建预设 |
@@ -54,6 +55,40 @@
 
 `name` 可省略。未指定的参数采用 `/catalog` 中的默认值；未知参数、字符串形式数字、布尔值充当数字、非有限浮点数及越界数值都会被拒绝。相互依赖参数（如色阶黑场必须小于白场）在算法执行前继续验证。
 
+## 动态规则
+
+每个步骤可带一个 `rules` 数组，按顺序覆盖 `params`：
+
+```json
+{
+  "operation": "watermark_text",
+  "params": {"text": "光屿 · IMAGE STUDIO", "size": 32},
+  "rules": [
+    {"label": "竖图缩小水印", "when": "orientation == \"portrait\"", "params": {"size": 24}},
+    {"label": "按画幅与名称计算", "when": "width > 0",
+     "params": {
+       "size": {"$expr": "clamp(round(width / 36), 14, 96)"},
+       "margin": {"$expr": "clamp(round(width / 60), 8, 80)"},
+       "text": {"$expr": "\"© \" + source.stem"}
+     }}
+  ]
+}
+```
+
+规则按数组顺序处理，后者覆盖前者；未命中的规则不改变参数。变量：
+
+| 变量 | 含义 |
+| --- | --- |
+| `width`、`height`、`orientation` | 本步骤输入图片的宽、高与方向（`landscape` / `portrait` / `square`），因此前一步的裁剪或缩放已经生效 |
+| `source.width`、`source.height`、`source.orientation`、`source.megapixels` | 提交时的原片快照 |
+| `source.name`、`source.stem`、`source.tags`、`source.kind` | 提交时的文件名、去扩展名名称、标签和素材类型 |
+
+可用运算：`+ - * / %`、比较、`and or not in`，函数 `min max round floor ceil abs int len clamp lower upper choose`。表达式只能使用以上变量与函数；不存在属性访问、索引、导入、文件访问或任意函数调用。
+
+表达式结果只是一份候选参数值，仍要通过操作目录的常规检查（类型、范围、步长、奇数等）。某张图不适用时，响应为 400、`code` 为 `rule_error`，`details` 指出 `step`、`operation`、`rule`、`parameter`、`expression` 与阶段，其他素材与任务不受影响。`/resolve` 与 `/preview` 可用同样的 `steps` 查看每张图命中的规则与可预测的输出尺寸。
+
+批量任务在提交时保存 `snapshots`（每张源图的名称、标签、尺寸与类型）。之后修改预设、重新命名或改标签都不会改变已排队批次；`/process`、`/preview` 也可显式传入 `snapshot`，但其 `asset_id` 和宽高必须与素材记录一致。
+
 成功返回的新素材包含 `id`、`parent_id`、`root_id`、`steps`、`url`、`thumbnail_url`、尺寸、字节数和处理耗时。原图文件不变。
 
 ## 批量请求
@@ -71,7 +106,7 @@
 
 任务状态：`queued → running → completed / partial / failed`。取消使用 `cancelling → cancelled`。服务重启后，未完成任务变为 `interrupted`。批内每张图片独立保存，失败不会阻止后续图片处理。
 
-`results` 保存成功素材的 id；`errors` 保存失败图片 id 和原因；`progress` 为 0–100；`done/total` 表示完成尝试的图片数量。取消时保留已完成结果。
+`results` 保存成功素材的 id；`errors` 保存失败图片 id 和原因；`progress` 为 0–100；`done/total` 表示完成尝试的图片数量。取消时保留已完成结果。任务同时保存提交时的 `steps` 与 `snapshots`，后续修改预设或素材名称/标签不会影响该任务。
 
 ## 导出请求
 

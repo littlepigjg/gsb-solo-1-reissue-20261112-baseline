@@ -24,6 +24,11 @@ def ok(data=None, status=200):
     return jsonify({"ok": True, "data": data}), status
 
 
+def header_value(value):
+    """HTTP headers are latin-1; keep the JSON payload ASCII-only there."""
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+
+
 @api.get("/health")
 def health():
     return ok({"status": "ready", "version": "1.0.0", "storage": "JSON", "features": 10, "operations": len(service("registry").specs)})
@@ -136,15 +141,25 @@ def compare():
 
 @api.post("/process")
 def process():
-    data = payload({"asset_id", "steps", "name"})
-    return ok(service("processing").process(data.get("asset_id"), data.get("steps"), data.get("name")), 201)
+    data = payload({"asset_id", "steps", "name", "snapshot"})
+    return ok(service("processing").process(
+        data.get("asset_id"), data.get("steps"), data.get("name"), snapshot=data.get("snapshot"),
+    ), 201)
 
 
 @api.post("/preview")
 def preview():
-    data = payload({"asset_id", "steps"})
-    buffer = service("processing").preview(data.get("asset_id"), data.get("steps"))
-    return send_file(buffer, mimetype="image/png", max_age=0)
+    data = payload({"asset_id", "steps", "snapshot"})
+    buffer, report = service("processing").preview(data.get("asset_id"), data.get("steps"), data.get("snapshot"))
+    response = send_file(buffer, mimetype="image/png", max_age=0)
+    response.headers["X-Studio-Dynamic"] = header_value(report)
+    return response
+
+
+@api.post("/resolve")
+def resolve():
+    data = payload({"asset_id", "steps", "snapshot"})
+    return ok(service("processing").resolve_report(data.get("asset_id"), data.get("steps"), data.get("snapshot")))
 
 
 @api.post("/samples")
@@ -181,8 +196,10 @@ def job_list():
 
 @api.post("/jobs")
 def job_create():
-    data = payload({"asset_ids", "steps", "title"})
-    return ok(service("jobs").submit(data.get("asset_ids"), data.get("steps"), data.get("title", "批量图像处理")), 202)
+    data = payload({"asset_ids", "steps", "title", "snapshots"})
+    return ok(service("jobs").submit(
+        data.get("asset_ids"), data.get("steps"), data.get("title", "批量图像处理"), data.get("snapshots"),
+    ), 202)
 
 
 @api.get("/jobs/<job_id>")

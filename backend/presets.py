@@ -43,6 +43,44 @@ BUILTINS = [
             {"operation": "enhance_sharpness", "params": {"factor": 1.2}},
         ],
     },
+    {
+        "key": "adaptive",
+        "name": "自适应画幅",
+        "description": "按原片方向、尺寸和文件名计算比例、留白与水印，同一份设置适配横图、竖图和方图。",
+        "steps": [
+            {
+                "operation": "crop_ratio",
+                "params": {"ratio_width": 16, "ratio_height": 9},
+                "rules": [
+                    {"label": "竖图保留 4:5", "when": 'source.orientation == "portrait"',
+                     "params": {"ratio_width": 4, "ratio_height": 5}},
+                    {"label": "方图保持 1:1", "when": 'source.orientation == "square"',
+                     "params": {"ratio_width": 1, "ratio_height": 1}},
+                ],
+            },
+            {
+                "operation": "resize_pad",
+                "params": {"width": 1080, "height": 1080, "background": "#f4f0e8"},
+                "rules": [
+                    {"label": "横图输出 16:9", "when": 'source.orientation == "landscape"',
+                     "params": {"width": 1920, "height": 1080}},
+                ],
+            },
+            {
+                "operation": "watermark_text",
+                "params": {"text": "光屿 · IMAGE STUDIO", "size": 32, "margin": 24},
+                "rules": [
+                    {"label": "水印按画幅缩放", "when": "width > 0",
+                     "params": {
+                         "size": {"$expr": "clamp(round(width / 36), 14, 96)"},
+                         "margin": {"$expr": "clamp(round(width / 60), 8, 80)"},
+                     }},
+                    {"label": "用文件名署名", "when": "len(source.stem) > 0",
+                     "params": {"text": {"$expr": '"© " + source.stem'}}},
+                ],
+            },
+        ],
+    },
 ]
 
 

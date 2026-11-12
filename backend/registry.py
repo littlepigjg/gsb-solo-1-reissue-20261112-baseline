@@ -3,6 +3,7 @@ import importlib
 from dataclasses import dataclass
 from .errors import StudioError
 from .validation import object_value, reject_unknown, validate_parameters, list_value
+from .dynamic import normalize_step
 
 
 @dataclass
@@ -39,16 +40,21 @@ class Registry:
             raise StudioError("未知图像处理操作", details={"operation": operation})
         return self.specs[operation]
 
-    def validate_step(self, step):
+    def validate_step(self, step, step_index=None):
         object_value(step, "处理步骤")
-        reject_unknown(step, {"operation", "params"}, "处理步骤")
+        reject_unknown(step, {"operation", "params", "rules"}, "处理步骤")
         spec = self.spec(step.get("operation"))
-        params = validate_parameters(spec, step.get("params", {}))
-        return {"operation": spec["id"], "params": params}
+        return normalize_step(step, spec, step_index)
 
     def validate_pipeline(self, steps, maximum=12):
         list_value(steps, "处理步骤", maximum=maximum)
-        return [self.validate_step(step) for step in steps]
+        return [self.validate_step(step, index) for index, step in enumerate(steps)]
+
+    def resolved_step(self, step, context, step_index=None):
+        """Resolve one dynamic step for an image, then verify its parameters."""
+        from .dynamic import resolve_step
+        spec = self.spec(step.get("operation"))
+        return resolve_step(step, spec, context, step_index)
 
     def apply(self, image, step, context):
         validated = self.validate_step(step)

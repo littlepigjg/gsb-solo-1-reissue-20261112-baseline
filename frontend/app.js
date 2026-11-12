@@ -8,6 +8,7 @@ const state = {
   assets: [], assetMap: new Map(), assetTotal: 0, selected: new Set(),
   pipeline: [], presets: [], jobs: [], busy: false, comparing: false,
   selectionToken: 0, libraryToken: 0, exportIds: [], jobPoll: null,
+  rules: [], rulePreview: [],
 };
 
 const paths = {
@@ -143,6 +144,7 @@ function chooseCategory(category, operationId = null) {
   state.category = category;
   const operations = state.catalog.operations.filter(operation => operation.category === category);
   state.operation = operationId || operations[0].id;
+  state.rules = [];
   const metadata = state.catalog.categories.find(item => item.id === category);
   $("#tool-symbol").innerHTML = icon(metadata.icon);
   $("#category-title").textContent = metadata.title;
@@ -191,6 +193,98 @@ function renderParameters() {
     range.addEventListener("input", () => { number.value = range.value; });
     number.addEventListener("input", () => { range.value = number.value; });
   });
+  renderRules();
+}
+
+function ruleField(options) {
+  const field = findOperation(state.operation).parameters.find(item => item.name === options.name);
+  const control = (name, value) => {
+    if (!field) return `<input data-rule-input="${name}" value="${escapeHtml(value ?? "")}" placeholder="参数值">`;
+    if (["integer", "number"].includes(field.type)) {
+      return `<input data-rule-input="${name}" type="number" min="${field.min}" max="${field.max}" step="${field.step}" value="${escapeHtml(value ?? "")}">`;
+    }
+    if (field.type === "select") {
+      return `<select data-rule-input="${name}">${field.options.map(option => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
+    }
+    if (field.type === "boolean") {
+      return `<label class="checkbox-label"><input data-rule-input="${name}" type="checkbox" ${value ? "checked" : ""}>启用</label>`;
+    }
+    return `<input data-rule-input="${name}" type="${field.type === "color" ? "color" : "text"}" value="${escapeHtml(value ?? field.default)}">`;
+  };
+  if (options.expression !== undefined) {
+    return `<input data-rule-input="${options.name}" data-rule-mode="expr" value="${escapeHtml(options.expression)}" placeholder='例：clamp(round(width / 36), 14, 96)'>`;
+  }
+  return control(options.name, options.value);
+}
+
+function ruleRow(ruleIndex, rowIndex, override) {
+  const fields = findOperation(state.operation).parameters;
+  const field = fields.find(item => item.name === override.name) || fields[0];
+  const options = fields.map(item => `<option value="${item.name}" ${item.name === override.name ? "selected" : ""}>${escapeHtml(item.label)} · ${item.name}</option>`).join("");
+  const valueControl = override.mode === "expr"
+    ? ruleField({ name: override.name, expression: override.value })
+    : ruleField({ name: override.name, value: override.value });
+  return `<div class="rule-row" data-rule-row="${ruleIndex}:${rowIndex}">
+    <select data-rule-name>${options}</select>
+    <select data-rule-mode><option value="value" ${override.mode !== "expr" ? "selected" : ""}>固定值</option><option value="expr" ${override.mode === "expr" ? "selected" : ""}>公式</option></select>
+    <div class="rule-value">${valueControl}</div>
+    <button type="button" class="text-button" data-remove-rule-row="${ruleIndex}:${rowIndex}" aria-label="移除参数" title="移除参数">×</button>
+  </div>`;
+}
+
+function renderRules() {
+  $("#rule-list").innerHTML = state.rules.length ? state.rules.map((rule, ruleIndex) => `
+    <div class="rule-card" data-rule="${ruleIndex}">
+      <div class="rule-card-head">
+        <input data-rule-label value="${escapeHtml(rule.label)}" placeholder="规则名称" aria-label="规则名称">
+        <button type="button" class="text-button" data-remove-rule="${ruleIndex}" aria-label="删除规则" title="删除规则">×</button>
+      </div>
+      <label class="rule-when">适用条件<input data-rule-when value="${escapeHtml(rule.when)}" placeholder='例：source.orientation == "portrait"' aria-label="规则适用条件"></label>
+      <div class="rule-rows">${rule.overrides.map((override, rowIndex) => ruleRow(ruleIndex, rowIndex, override)).join("")}</div>
+      <button type="button" class="text-button" data-add-rule-row="${ruleIndex}"><span data-icon="plus"></span>设置参数</button>
+    </div>`).join("") : '<p class="field-help">没有动态规则时，所有图片使用上面的固定参数。</p>';
+  $$("[data-rule-label]").forEach(input => input.addEventListener("input", () => {
+    state.rules[Number(input.closest("[data-rule]").dataset.rule)].label = input.value;
+  }));
+  $$("[data-rule-when]").forEach(input => input.addEventListener("input", () => {
+    state.rules[Number(input.closest("[data-rule]").dataset.rule)].when = input.value;
+  }));
+  $$("[data-rule-name]").forEach(select => select.addEventListener("change", () => {
+    const ruleIndex = Number(select.closest("[data-rule]").dataset.rule);
+    const rowIndex = Number(select.closest("[data-rule-row]").dataset.ruleRow.split(":")[1]);
+    const override = state.rules[ruleIndex].overrides[rowIndex];
+    override.name = select.value;
+    override.value = undefined;
+    renderRules();
+  }));
+  $$("[data-rule-mode]").forEach(select => select.addEventListener("change", () => {
+    const ruleIndex = Number(select.closest("[data-rule]").dataset.rule);
+    const rowIndex = Number(select.closest("[data-rule-row]").dataset.ruleRow.split(":")[1]);
+    const override = state.rules[ruleIndex].overrides[rowIndex];
+    override.mode = select.value;
+    override.value = select.value === "expr" ? "" : override.value;
+    renderRules();
+  }));
+  $$("[data-rule-input]").forEach(input => input.addEventListener("input", () => {
+    const ruleIndex = Number(input.closest("[data-rule]").dataset.rule);
+    const rowIndex = Number(input.closest("[data-rule-row]").dataset.ruleRow.split(":")[1]);
+    const override = state.rules[ruleIndex].overrides[rowIndex];
+    override.value = input.type === "checkbox" ? input.checked : input.value;
+  }));
+  $$("[data-remove-rule]").forEach(button => button.addEventListener("click", () => {
+    state.rules.splice(Number(button.dataset.removeRule), 1); renderRules();
+  }));
+  $$("[data-add-rule-row]").forEach(button => button.addEventListener("click", () => {
+    const ruleIndex = Number(button.dataset.addRuleRow);
+    const field = findOperation(state.operation).parameters[0];
+    state.rules[ruleIndex].overrides.push({ name: field.name, mode: "value", value: field.default });
+    renderRules();
+  }));
+  $$("[data-remove-rule-row]").forEach(button => button.addEventListener("click", () => {
+    const [ruleIndex, rowIndex] = button.dataset.removeRuleRow.split(":").map(Number);
+    state.rules[ruleIndex].overrides.splice(rowIndex, 1); renderRules();
+  }));
+  hydrateIcons($("#rule-list"));
 }
 
 function readStep() {
@@ -208,7 +302,34 @@ function readStep() {
     } else if (field.type === "boolean") params[field.name] = input.checked;
     else params[field.name] = input.value;
   }
-  return { operation: operation.id, params };
+  return state.rules.length ? { operation: operation.id, params, rules: readRules(operation) } : { operation: operation.id, params };
+}
+
+function readRules(operation) {
+  return state.rules.map((rule, index) => {
+    const when = String(rule.when || "").trim();
+    if (!when) throw new Error(`请为规则“${rule.label || index + 1}”填写适用条件。`);
+    if (!rule.overrides.length) throw new Error(`规则“${rule.label || index + 1}”至少需要一个参数。`);
+    const params = {};
+    for (const override of rule.overrides) {
+      if (override.mode === "expr") {
+        const expression = String(override.value || "").trim();
+        if (!expression) throw new Error(`规则“${rule.label || index + 1}”的公式不能为空。`);
+        params[override.name] = { $expr: expression };
+        continue;
+      }
+      const field = operation.parameters.find(item => item.name === override.name);
+      let value = override.value;
+      if (!field) value = String(value ?? "");
+      else if (["integer", "number"].includes(field.type)) {
+        value = Number(value);
+        if (!Number.isFinite(value)) throw new Error(`规则“${rule.label || index + 1}”的参数“${field.label}”需要数字。`);
+      } else if (field.type === "boolean") value = Boolean(value);
+      else value = String(value ?? "");
+      params[override.name] = value;
+    }
+    return { label: String(rule.label || `规则 ${index + 1}`).trim(), when, params };
+  });
 }
 
 function renderFilmstrip() {
@@ -335,6 +456,7 @@ function renderLibrary() {
     if (input.checked && state.selected.size >= 24) { input.checked = false; toast("每批最多选择 24 张图片。", "error"); return; }
     if (input.checked) state.selected.add(input.dataset.select);
     else state.selected.delete(input.dataset.select);
+    state.rulePreview = [];
     renderLibrary();
   }));
   $$("[data-open]").forEach(button => button.addEventListener("click", () => selectAsset(button.dataset.open, true).catch(error => toast(error.message, "error"))));
@@ -383,7 +505,7 @@ function confirmDelete(id) {
 function renderPipeline() {
   $("#pipeline-count").textContent = state.pipeline.length;
   $("#pipeline-list").innerHTML = state.pipeline.length ? state.pipeline.map((step, index) => `
-    <div class="pipeline-step"><span class="step-number">${String(index + 1).padStart(2, "0")}</span><span class="step-title">${escapeHtml(findOperation(step.operation).title)}</span><div class="step-buttons"><button data-move="${index}" ${index === 0 ? "disabled" : ""} title="向上移动" aria-label="向上移动">↑</button><button data-remove="${index}" title="移除步骤" aria-label="移除步骤">×</button></div></div>`).join("") : '<div class="empty-hint">还没有处理步骤<br>在“调整”中点击“加入流程”，<br>或选择上方的预设。</div>';
+    <div class="pipeline-step"><span class="step-number">${String(index + 1).padStart(2, "0")}</span><span class="step-title">${escapeHtml(findOperation(step.operation).title)}${step.rules?.length ? `<span class="step-rules">${step.rules.length} 条动态规则</span>` : ""}</span><div class="step-buttons"><button data-move="${index}" ${index === 0 ? "disabled" : ""} title="向上移动" aria-label="向上移动">↑</button><button data-remove="${index}" title="移除步骤" aria-label="移除步骤">×</button></div></div>`).join("") : '<div class="empty-hint">还没有处理步骤<br>在“调整”中点击“加入流程”，<br>或选择上方的预设。</div>';
   $$("[data-remove]").forEach(button => button.addEventListener("click", () => {
     state.pipeline.splice(Number(button.dataset.remove), 1); renderPipeline();
   }));
@@ -405,6 +527,9 @@ function loadPreset(id) {
   const preset = state.presets.find(item => item.id === id);
   if (!preset) return;
   state.pipeline = structuredClone(preset.steps);
+  state.rules = [];
+  state.rulePreview = [];
+  renderRules();
   renderPipeline();
   toast(`已载入“${preset.name}”，点击应用后执行。`, "info");
 }
@@ -446,6 +571,54 @@ function batchSteps() {
   return preset ? preset.steps : state.pipeline;
 }
 
+function renderBatchPreview() {
+  if (!state.selected.size) { $("#batch-preview-list").innerHTML = ""; return; }
+  $("#batch-preview-list").innerHTML = state.rulePreview.length ? state.rulePreview.map(item => `
+    <div class="batch-preview-item ${item.error ? "failed" : ""}" data-preview-item="${item.id}">
+      <div class="batch-preview-head"><span>${escapeHtml(item.name)}</span>${item.error ? '<span class="badge">不适用</span>' : `<span>→ ${item.width} × ${item.height}</span>`}</div>
+      ${item.error ? `<p class="batch-preview-error">${escapeHtml(item.error)}</p>` : `<div class="batch-preview-rules">${item.steps.filter(step => step.matched_rules.length).map(step => `第 ${step.index} 步 ${escapeHtml(step.title)}：${step.matched_rules.map(rule => escapeHtml(rule.label)).join("、")}`).join("<br>") || '<span class="muted">没有规则匹配，使用固定参数。</span>'}</div>`}
+      ${item.image ? `<img class="batch-preview-image" src="${item.image}" alt="${escapeHtml(item.name)} 预览">` : ""}
+    </div>`).join("") : '<p class="muted">点击“逐张预览计算参数”，为每张图分别计算结果。</p>';
+}
+
+async function previewImageUrl(assetId, steps) {
+  const response = await fetch("/api/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ asset_id: assetId, steps }),
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error?.message || `预览失败（${response.status}）`);
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
+async function previewBatchRules() {
+  const steps = batchSteps();
+  if (!state.selected.size) throw new Error("请先选择待处理图片。");
+  if (!steps.length) throw new Error("请先选择预设或建立流程。");
+  $("#batch-preview-list").innerHTML = '<p class="muted">正在逐张计算…</p>';
+  state.rulePreview.forEach(item => { if (item.image) URL.revokeObjectURL(item.image); });
+  state.rulePreview = await Promise.all([...state.selected].map(async id => {
+    const asset = state.assetMap.get(id) || await api(`/assets/${id}`);
+    let resolution;
+    try {
+      resolution = await api("/resolve", { method: "POST", body: { asset_id: id, steps } });
+    } catch (error) {
+      return { id, name: asset.name, error: error.message };
+    }
+    let image = null;
+    try { image = await previewImageUrl(id, steps); } catch { /* keep the numeric plan visible */ }
+    return {
+      id, name: asset.name,
+      width: resolution.output_size.width, height: resolution.output_size.height,
+      steps: resolution.steps, image,
+    };
+  }));
+  renderBatchPreview();
+}
+
 function renderBatch() {
   $("#batch-selected-count").textContent = state.selected.size;
   $("#batch-images").innerHTML = state.selected.size ? [...state.selected].map(id => {
@@ -453,8 +626,14 @@ function renderBatch() {
     return asset ? `<div class="batch-thumb"><img src="${asset.thumbnail_url}" alt="${escapeHtml(asset.name)}"><button data-unselect="${id}" aria-label="移除 ${escapeHtml(asset.name)}">×</button></div>` : "";
   }).join("") : '<p class="muted">还没有待处理图片，从素材库选择几张吧。</p>';
   const steps = batchSteps();
-  $("#batch-steps").innerHTML = steps.length ? steps.map((step, index) => `<div class="batch-step">${index + 1}. ${escapeHtml(findOperation(step.operation).title)}</div>`).join("") : '<p class="muted">请选择预设，或先在工作台建立处理流程。</p>';
-  $$("[data-unselect]").forEach(button => button.addEventListener("click", () => { state.selected.delete(button.dataset.unselect); renderBatch(); }));
+  $("#batch-steps").innerHTML = steps.length ? steps.map((step, index) => `<div class="batch-step">${index + 1}. ${escapeHtml(findOperation(step.operation).title)}${step.rules?.length ? ` · ${step.rules.length} 条动态规则` : ""}</div>`).join("") : '<p class="muted">请选择预设，或先在工作台建立处理流程。</p>';
+  renderBatchPreview();
+  $$("[data-unselect]").forEach(button => button.addEventListener("click", () => { state.selected.delete(button.dataset.unselect); state.rulePreview = []; renderBatch(); }));
+}
+
+function invalidateRulePreview() {
+  state.rulePreview = [];
+  if ($("#batch-preview-list")) renderBatchPreview();
 }
 
 async function refreshJobs() {
@@ -549,18 +728,28 @@ function bindEvents() {
   $$(".close-dialog").forEach(button => button.addEventListener("click", () => button.closest("dialog").close()));
   ["#top-upload", "#empty-upload", "#library-upload"].forEach(selector => on(selector, "click", () => $("#file-input").click()));
   on("#file-input", "change", event => importFiles([...event.target.files]));
-  on("#operation-select", "change", () => { state.operation = $("#operation-select").value; renderParameters(); });
+  on("#operation-select", "change", () => { state.operation = $("#operation-select").value; state.rules = []; renderParameters(); });
   on("#parameter-form", "submit", event => event.preventDefault());
   on("#reset-params", "click", () => { renderParameters(); toast("参数已重置", "info"); });
   on("#apply-button", "click", () => processSteps([readStep()]));
   on("#run-pipeline", "click", () => processSteps(state.pipeline));
   on("#add-step", "click", () => {
     if (state.pipeline.length >= 12) throw new Error("每个流程最多 12 个步骤。");
-    state.pipeline.push(readStep()); renderPipeline(); toast("已加入处理流程", "info");
+    state.pipeline.push(readStep()); renderPipeline(); invalidateRulePreview(); toast("已加入处理流程", "info");
   });
-  on("#clear-pipeline", "click", () => { state.pipeline = []; $("#preset-select").value = ""; renderPipeline(); });
+  on("#add-rule", "click", () => {
+    const field = findOperation(state.operation).parameters[0];
+    state.rules.push({
+      label: `规则 ${state.rules.length + 1}`,
+      when: "",
+      overrides: [{ name: field.name, mode: "value", value: field.default }],
+    });
+    renderRules();
+  });
+  on("#clear-pipeline", "click", () => { state.pipeline = []; state.rulePreview = []; $("#preset-select").value = ""; renderPipeline(); });
   on("#preset-select", "change", event => loadPreset(event.target.value));
-  on("#batch-preset", "change", renderBatch);
+  on("#batch-preset", "change", () => { state.rulePreview = []; renderBatch(); });
+  on("#batch-preview", "click", previewBatchRules);
   on("#save-preset", "click", () => {
     if (!state.pipeline.length) throw new Error("请先添加处理步骤。");
     $("#preset-dialog").showModal();
