@@ -1,9 +1,9 @@
 {
   "scope": "backend/**/*.py only; excludes frontend, tests, scripts, run.py and dependencies",
   "files": 35,
-  "physical_lines": 5574,
-  "nonblank_noncomment_lines": 5114,
-  "code_lines_excluding_docstrings": 5074,
+  "physical_lines": 5895,
+  "nonblank_noncomment_lines": 5400,
+  "code_lines_excluding_docstrings": 5344,
   "modules": [
     {
       "file": "backend/__init__.py",
@@ -19,9 +19,9 @@
     },
     {
       "file": "backend/app.py",
-      "physical_lines": 106,
-      "nonblank_noncomment_lines": 96,
-      "code_lines_excluding_docstrings": 95
+      "physical_lines": 107,
+      "nonblank_noncomment_lines": 97,
+      "code_lines_excluding_docstrings": 96
     },
     {
       "file": "backend/assets.py",
@@ -91,9 +91,9 @@
     },
     {
       "file": "backend/diagnostics.py",
-      "physical_lines": 99,
-      "nonblank_noncomment_lines": 94,
-      "code_lines_excluding_docstrings": 93
+      "physical_lines": 103,
+      "nonblank_noncomment_lines": 98,
+      "code_lines_excluding_docstrings": 97
     },
     {
       "file": "backend/errors.py",
@@ -205,9 +205,9 @@
     },
     {
       "file": "backend/storage.py",
-      "physical_lines": 159,
-      "nonblank_noncomment_lines": 138,
-      "code_lines_excluding_docstrings": 133
+      "physical_lines": 475,
+      "nonblank_noncomment_lines": 419,
+      "code_lines_excluding_docstrings": 398
     },
     {
       "file": "backend/validation.py",

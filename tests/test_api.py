@@ -182,11 +182,13 @@ def test_png_export_retains_alpha(client, uploaded):
 def test_json_persists_across_restart(app, uploaded):
     root = app.extensions["studio"]["settings"].root
     app.extensions["studio"]["jobs"].shutdown()
+    app.extensions["studio"]["store"].close()
     second = create_app(root, testing=True)
     try:
         assert second.test_client().get(f"/api/assets/{uploaded['id']}").json["data"]["name"] == "测试原图.png"
     finally:
         second.extensions["studio"]["jobs"].shutdown()
+        second.extensions["studio"]["store"].close()
 
 
 def test_cross_origin_write_rejected(client, uploaded):
@@ -207,6 +209,11 @@ def test_backup_and_diagnostics(client, uploaded):
     diagnostics = client.get("/api/diagnostics").json["data"]
     assert diagnostics["healthy"] is True
     assert diagnostics["media_file_count"] == 2
+    storage = diagnostics["storage"]
+    assert storage["saves"] > 0
+    assert storage["journal_bytes_written"] > 0
+    assert storage["save_wait_ms"] >= 0
+    assert storage["collections"]["assets"]["journal_bytes"] > 0
 
 
 def test_sample_creation_idempotent(client):

@@ -19,6 +19,7 @@ def main():
         serve(app, host=args.host, port=args.port, threads=6, max_request_body_size=26 * 1024 * 1024)
     finally:
         app.extensions["studio"]["jobs"].shutdown()
+        app.extensions["studio"]["store"].close()
 
 
 if __name__ == "__main__":

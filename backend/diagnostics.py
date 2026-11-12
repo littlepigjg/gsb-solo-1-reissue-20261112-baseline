@@ -24,14 +24,17 @@ class DiagnosticsService:
         issues = []
         collections = {}
         records = {}
+        storage = self.store.metrics()
         for name in sorted(self.store.COLLECTIONS):
             try:
                 entries = self.store.all(name)
                 records[name] = entries
+                usage = storage["collections"][name]
                 path = self.settings.database / f"{name}.json"
                 collections[name] = {
                     "records": len(entries),
-                    "bytes": path.stat().st_size,
+                    "bytes": usage["snapshot_bytes"] + usage["journal_bytes"],
+                    "journal_bytes": usage["journal_bytes"],
                     "backup_exists": path.with_suffix(".json.bak").exists(),
                     "readable": True,
                 }
@@ -85,6 +88,7 @@ class DiagnosticsService:
             "platform": platform.system(),
             "dependencies": self.dependencies(),
             "collections": collections,
+            "storage": storage,
             "media_file_count": len(disk_files),
             "tracked_media_count": len(tracked_files),
             "missing_media_count": len(missing_files),

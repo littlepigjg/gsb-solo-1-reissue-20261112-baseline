@@ -15,6 +15,7 @@ def app(tmp_path):
     application = create_app(data_dir=tmp_path / "data", testing=True)
     yield application
     application.extensions["studio"]["jobs"].shutdown()
+    application.extensions["studio"]["store"].close()
 
 
 @pytest.fixture

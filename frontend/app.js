@@ -532,13 +532,18 @@ async function showSystem() {
   $("#system-dialog").showModal();
   $("#system-content").innerHTML = '<p class="muted">正在读取运行状态…</p>';
   const [stats, health, diagnostics] = await Promise.all([api("/stats"), api("/health"), api("/diagnostics")]);
+  const storage = diagnostics.storage;
   const rows = [
     ["服务状态", "运行中"], ["版本", health.version], ["Python", diagnostics.python],
     ["图像处理", `${health.features} 项功能 / ${health.operations} 种操作`],
-    ["业务数据存储", "JSON 文件"], ["图像数量", stats.assets], ["处理副本", stats.results],
+    ["业务数据存储", "JSON 快照 + 保存日志"], ["图像数量", stats.assets], ["处理副本", stats.results],
     ["图像占用", humanBytes(stats.bytes)], ["已完成批次", stats.completed_jobs],
     ["允许单图大小", `${state.config.max_upload_mb} MB`],
     ["最大像素", `${state.config.max_pixels / 1000000} MP`], ["空闲磁盘", humanBytes(diagnostics.disk_free_bytes)],
+    ["保存写入量", `${humanBytes(storage.journal_bytes_written)} · ${storage.saves} 次`],
+    ["保存落盘等待", `累计 ${Math.round(storage.save_wait_ms)} ms · 峰值 ${Math.round(storage.save_wait_max_ms)} ms`],
+    ["后台整理", `${storage.checkpoints} 次 · 写入 ${humanBytes(storage.checkpoint_bytes_written)} · 最近 ${Math.round(storage.last_checkpoint_ms)} ms`],
+    ["待整理日志", humanBytes(storage.journal_bytes_pending)],
   ];
   $("#system-content").innerHTML = `<dl class="system-data">${rows.map(([label, value]) => `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl>${diagnostics.issues.length ? `<p class="system-alert">${diagnostics.issues.length} 项数据检查提示，请查看 /api/diagnostics。</p>` : '<p class="muted">JSON 数据与图片文件检查正常。</p>'}`;
 }

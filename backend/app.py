@@ -52,6 +52,7 @@ def create_app(data_dir=None, testing=False):
     app.extensions["studio"] = services
     if not testing:
         atexit.register(jobs.shutdown)
+        atexit.register(store.close)
 
     @app.before_request
     def before_request():

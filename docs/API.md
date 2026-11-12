@@ -10,7 +10,7 @@
 | GET | `/config` | 文件大小、尺寸、批量数量限制 |
 | GET | `/catalog` | 全部功能分组、86 种操作与参数定义 |
 | GET | `/stats` | 素材、结果、导出、批次统计 |
-| GET | `/diagnostics` | 依赖版本、JSON 与文件完整性检查 |
+| GET | `/diagnostics` | 依赖版本、JSON 与文件完整性检查、存储写入/等待/整理指标 |
 | GET | `/assets` | 素材查询，支持 q/kind/favorite/limit/offset |
 | POST | `/assets` | multipart 图片上传 |
 | GET | `/assets/{id}` | 素材详细信息 |
