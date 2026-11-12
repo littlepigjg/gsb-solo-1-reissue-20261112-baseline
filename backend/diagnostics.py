@@ -71,6 +71,20 @@ class DiagnosticsService:
         for record in records["exports"]:
             if not (self.settings.exports / record["filename"]).is_file():
                 issues.append({"code": "missing_export", "export_id": record["id"]})
+        staging = self.settings.exports / ".staging"
+        export_tasks = records.get("export_tasks", [])
+        active_exports = [
+            item["id"]
+            for item in export_tasks
+            if item["status"] in {"queued", "preparing", "cancelling"}
+        ]
+        # A live preparation intentionally owns its staging file; only audit
+        # leftovers when nothing is running, so a healthy export stays healthy.
+        leftovers = []
+        if staging.is_dir() and not active_exports:
+            leftovers = sorted(path.name for path in staging.glob("*") if path.is_file())
+        for filename in leftovers:
+            issues.append({"code": "incomplete_export", "filename": filename})
         usage = shutil.disk_usage(self.settings.root)
         if usage.free < 512 * 1024 * 1024:
             issues.append({"code": "low_disk_space", "message": "空闲磁盘空间低于 512 MB"})
@@ -89,6 +103,8 @@ class DiagnosticsService:
             "tracked_media_count": len(tracked_files),
             "missing_media_count": len(missing_files),
             "orphan_media_count": len(orphans),
+            "active_exports": active_exports,
+            "incomplete_export_count": len(leftovers),
             "disk_total_bytes": usage.total,
             "disk_free_bytes": usage.free,
             "active_jobs": active_jobs,

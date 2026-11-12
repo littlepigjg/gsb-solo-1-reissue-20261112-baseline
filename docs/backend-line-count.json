@@ -1,9 +1,9 @@
 {
   "scope": "backend/**/*.py only; excludes frontend, tests, scripts, run.py and dependencies",
   "files": 35,
-  "physical_lines": 5574,
-  "nonblank_noncomment_lines": 5114,
-  "code_lines_excluding_docstrings": 5074,
+  "physical_lines": 6134,
+  "nonblank_noncomment_lines": 5603,
+  "code_lines_excluding_docstrings": 5544,
   "modules": [
     {
       "file": "backend/__init__.py",
@@ -19,15 +19,15 @@
     },
     {
       "file": "backend/app.py",
-      "physical_lines": 106,
-      "nonblank_noncomment_lines": 96,
-      "code_lines_excluding_docstrings": 95
+      "physical_lines": 107,
+      "nonblank_noncomment_lines": 97,
+      "code_lines_excluding_docstrings": 96
     },
     {
       "file": "backend/assets.py",
-      "physical_lines": 167,
-      "nonblank_noncomment_lines": 153,
-      "code_lines_excluding_docstrings": 152
+      "physical_lines": 170,
+      "nonblank_noncomment_lines": 156,
+      "code_lines_excluding_docstrings": 155
     },
     {
       "file": "backend/catalog/__init__.py",
@@ -91,9 +91,9 @@
     },
     {
       "file": "backend/diagnostics.py",
-      "physical_lines": 99,
-      "nonblank_noncomment_lines": 94,
-      "code_lines_excluding_docstrings": 93
+      "physical_lines": 115,
+      "nonblank_noncomment_lines": 108,
+      "code_lines_excluding_docstrings": 107
     },
     {
       "file": "backend/errors.py",
@@ -103,9 +103,9 @@
     },
     {
       "file": "backend/exports.py",
-      "physical_lines": 120,
-      "nonblank_noncomment_lines": 109,
-      "code_lines_excluding_docstrings": 108
+      "physical_lines": 617,
+      "nonblank_noncomment_lines": 549,
+      "code_lines_excluding_docstrings": 529
     },
     {
       "file": "backend/imaging.py",
@@ -187,9 +187,9 @@
     },
     {
       "file": "backend/routes.py",
-      "physical_lines": 229,
-      "nonblank_noncomment_lines": 158,
-      "code_lines_excluding_docstrings": 157
+      "physical_lines": 272,
+      "nonblank_noncomment_lines": 189,
+      "code_lines_excluding_docstrings": 188
     },
     {
       "file": "backend/samples.py",

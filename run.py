@@ -18,6 +18,7 @@ def main():
     try:
         serve(app, host=args.host, port=args.port, threads=6, max_request_body_size=26 * 1024 * 1024)
     finally:
+        app.extensions["studio"]["exports"].shutdown()
         app.extensions["studio"]["jobs"].shutdown()
 
 

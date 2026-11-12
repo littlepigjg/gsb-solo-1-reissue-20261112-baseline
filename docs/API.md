@@ -33,7 +33,12 @@
 | GET | `/jobs/{id}` | 查询状态和进度 |
 | POST | `/jobs/{id}/cancel` | 申请取消，body 为 `{}` |
 | POST | `/exports` | 单图实际格式编码 |
-| POST | `/exports/archive` | 多图编码并生成 ZIP |
+| POST | `/exports/archive` | 同步多图编码并生成 ZIP（保留兼容） |
+| POST | `/exports/archive/tasks` | 提交后台批量导出准备，返回 202 |
+| GET | `/exports/archive/tasks` | 最近 20 条导出准备任务 |
+| GET | `/exports/archive/tasks/{id}` | 导出准备进度、状态与取消地址 |
+| POST | `/exports/archive/tasks/{id}/cancel` | 取消导出准备，body 为 `{}` |
+| GET | `/exports/archive/tasks/{id}/download` | 下载已完整准备的压缩包 |
 | GET | `/exports/{id}/download` | 下载导出产物 |
 | GET | `/events` | 最近 100 条操作记录 |
 | GET | `/backup` | 下载完整 JSON 元数据快照 |
@@ -89,6 +94,21 @@
 ```
 
 支持 `PNG/JPEG/WEBP/BMP/TIFF/GIF`。响应的 `url` 可直接下载。ZIP 接口将 `asset_id` 改为 `asset_ids` 数组，压缩包中包含安全命名的图片和 `manifest.json`。
+
+### 大批量导出
+
+`POST /exports/archive/tasks` 使用与 `/exports` 相同的 `asset_ids` 与 `options`，但立即返回 202，并在后台逐张编码。每个图片成员直接写入 `data/exports/.staging/` 下的临时文件，服务内存只保留当前一张图片的工作副本，不随压缩包大小增长。压缩包最后写入 `manifest.json`，只有完整写入且成员顺序、数量与清单校验通过后，才原子改名为正式文件并登记 `exports` 记录。
+
+任务字段：
+
+- `status`：`queued → preparing → completed`；取消为 `cancelling → cancelled`；失败为 `failed`；服务重启后未完成任务变为 `interrupted`。
+- `done/total`、`progress`（0–100）、`bytes_prepared`：当前已编码的张数与已写入临时文件的字节数。
+- `current_name`：正在编码的图片名称。
+- `export_id`、`download_url`：仅在 `completed` 时存在。
+
+只有 `completed` 任务提供下载；`cancelled`、`failed`、`interrupted` 会清理临时文件，不留下可被误认为成品的记录。下载过程中若连接中断、未读完全部字节，该导出文件与记录同样会被删除，任务标记为 `download_interrupted` 失败。`/exports/archive/tasks` 同一时间只允许一个准备任务，避免并发大图编码互相挤占内存。同步 `/exports/archive` 接口保留，它使用相同的流式实现但不提供进度与取消。
+
+`GET /exports/archive/tasks/{id}/download` 以流式方式发送文件并统计实际读取字节；完整读取后才视为交付成功。
 
 ## 状态码
 

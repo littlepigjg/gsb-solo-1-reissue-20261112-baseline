@@ -24,6 +24,19 @@ def ok(data=None, status=200):
     return jsonify({"ok": True, "data": data}), status
 
 
+def tracked_download(reader, record, mime):
+    response = send_file(
+        reader,
+        mimetype=mime,
+        as_attachment=True,
+        download_name=record["download_name"],
+        conditional=False,
+    )
+    response.content_length = record["bytes"]
+    response.direct_passthrough = True
+    return response
+
+
 @api.get("/health")
 def health():
     return ok({"status": "ready", "version": "1.0.0", "storage": "JSON", "features": 10, "operations": len(service("registry").specs)})
@@ -49,6 +62,7 @@ def stats():
     assets = service("store").all("assets")
     jobs = service("store").all("jobs")
     exports = service("store").all("exports")
+    tasks = service("store").all("export_tasks")
     return ok({
         "assets": len(assets),
         "originals": sum(item["kind"] == "original" for item in assets),
@@ -58,6 +72,7 @@ def stats():
         "exports": len(exports),
         "active_jobs": sum(item["status"] in {"queued", "running", "cancelling"} for item in jobs),
         "completed_jobs": sum(item["status"] == "completed" for item in jobs),
+        "active_exports": sum(item["status"] in {"queued", "preparing", "cancelling"} for item in tasks),
     })
 
 
@@ -208,10 +223,38 @@ def export_archive():
     return ok(service("exports").archive(data.get("asset_ids"), data.get("options", {})), 201)
 
 
+@api.post("/exports/archive/tasks")
+def export_archive_task():
+    data = payload({"asset_ids", "options"})
+    return ok(service("exports").archive_task(data.get("asset_ids"), data.get("options", {})), 202)
+
+
+@api.get("/exports/archive/tasks")
+def export_archive_task_list():
+    return ok(service("exports").tasks())
+
+
+@api.get("/exports/archive/tasks/<task_id>")
+def export_archive_task_get(task_id):
+    return ok(service("exports").task(task_id))
+
+
+@api.post("/exports/archive/tasks/<task_id>/cancel")
+def export_archive_task_cancel(task_id):
+    payload(set())
+    return ok(service("exports").cancel_task(task_id))
+
+
+@api.get("/exports/archive/tasks/<task_id>/download")
+def export_archive_task_download(task_id):
+    reader, record, mime = service("exports").task_delivery(task_id)
+    return tracked_download(reader, record, mime)
+
+
 @api.get("/exports/<export_id>/download")
 def export_download(export_id):
-    path, record, mime = service("exports").file(export_id)
-    return send_file(path, mimetype=mime, as_attachment=True, download_name=record["download_name"])
+    reader, record, mime = service("exports").delivery(export_id)
+    return tracked_download(reader, record, mime)
 
 
 @api.get("/events")

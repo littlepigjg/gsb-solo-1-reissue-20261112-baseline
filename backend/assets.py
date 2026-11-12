@@ -145,6 +145,9 @@ class AssetService:
             for job in self.store.all("jobs"):
                 if job["status"] in {"queued", "running", "cancelling"} and asset_id in job["asset_ids"]:
                     raise Conflict("图片正在批量任务中使用，任务结束后才能删除")
+            for task in self.store.all("export_tasks"):
+                if task["status"] in {"queued", "preparing", "cancelling"} and asset_id in task.get("asset_ids", []):
+                    raise Conflict("图片正在批量导出中使用，导出结束或取消后才能删除")
             descendants = [item for item in self.store.all("assets") if item.get("parent_id") == asset_id]
             if descendants:
                 raise Conflict("该图片有处理副本，请先删除其副本，以保留完整历史")

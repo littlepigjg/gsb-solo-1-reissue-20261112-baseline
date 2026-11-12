@@ -7,7 +7,7 @@ const state = {
   category: "color", operation: "color_levels", current: null, root: null,
   assets: [], assetMap: new Map(), assetTotal: 0, selected: new Set(),
   pipeline: [], presets: [], jobs: [], busy: false, comparing: false,
-  selectionToken: 0, libraryToken: 0, exportIds: [], jobPoll: null,
+  selectionToken: 0, libraryToken: 0, exportIds: [], jobPoll: null, exportTask: null, exportCancelling: false, exportRun: 0,
 };
 
 const paths = {
@@ -493,16 +493,90 @@ function renderJobs() {
 function openExport(ids) {
   if (!ids.length) { toast("请先选择要导出的图片。", "error"); return; }
   state.exportIds = ids;
-  $("#export-target").textContent = ids.length > 1 ? `将 ${ids.length} 张图片打包为 ZIP 下载。` : `导出：${state.assetMap.get(ids[0])?.name || "处理结果"}`;
+  const names = ids.map(id => state.assetMap.get(id)?.name).filter(Boolean);
+  $("#export-target").textContent = ids.length > 1
+    ? `将 ${ids.length} 张图片打包为 ZIP 下载，按选择顺序排列${names.length ? `：${names.slice(0, 3).map(name => name.replace(/\.[^.]+$/, "")).join("、")}${names.length > 3 ? " 等" : ""}` : ""}。`
+    : `导出：${names[0] || "处理结果"}`;
   $$(".download-ready", $("#export-form")).forEach(element => element.remove());
+  resetExportProgress();
   $("#export-dialog").showModal();
+}
+
+function resetExportProgress() {
+  state.exportRun += 1;
+  $("#export-progress").hidden = true;
+  $("#export-progress-bar").style.width = "0%";
+  $("#export-progress-percent").textContent = "0%";
+  $("#export-progress-label").textContent = "正在准备导出…";
+  $("#export-progress-detail").textContent = "";
+  $("#export-error").hidden = true;
+  $("#export-error").textContent = "";
+  $("#export-cancel").disabled = false;
+  $("#export-cancel").hidden = false;
+  state.exportTask = null;
+  state.exportCancelling = false;
+}
+
+function renderExportTask(task) {
+  const percent = Math.max(0, Math.min(100, Number(task.progress) || 0));
+  $("#export-progress").hidden = false;
+  $("#export-progress-bar").style.width = `${percent}%`;
+  $("#export-progress-percent").textContent = `${percent}%`;
+  $("#export-progress-label").textContent = task.message || "正在准备导出…";
+  const prepared = task.bytes_prepared ? ` · 已写入 ${humanBytes(task.bytes_prepared)}` : "";
+  $("#export-progress-detail").textContent = `${task.done}/${task.total} 张图片${prepared}`;
+  $("#confirm-export").disabled = true;
+}
+
+function showExportFailure(message) {
+  $("#export-progress").hidden = true;
+  $("#export-error").hidden = false;
+  $("#export-error").textContent = message;
+}
+
+function downloadExport(url, name, label) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.className = "button wide download-ready";
+  link.textContent = label;
+  $("#export-form").append(link);
+  link.click();
+}
+
+async function waitForExportTask(task, run) {
+  while (true) {
+    if (run !== state.exportRun) return { status: "cancelled", stale: true };
+    const current = await api(`/exports/archive/tasks/${task.id}`);
+    if (run !== state.exportRun) return { status: "cancelled", stale: true };
+    state.exportTask = current;
+    if (current.status === "completed") return current;
+    if (["failed", "cancelled", "interrupted"].includes(current.status)) return current;
+    if (state.exportCancelling && !["cancelling"].includes(current.status)) {
+      await api(`/exports/archive/tasks/${task.id}/cancel`, { method: "POST", body: {} }).catch(() => {});
+    }
+    renderExportTask(current);
+    await new Promise(resolve => setTimeout(resolve, state.exportCancelling ? 200 : 400));
+  }
+}
+
+async function cancelExportTask() {
+  const task = state.exportTask;
+  if (!task || ["completed", "failed", "cancelled", "interrupted"].includes(task.status)) return;
+  state.exportCancelling = true;
+  $("#export-cancel").disabled = true;
+  $("#export-progress-label").textContent = "正在取消…";
+  try { await api(`/exports/archive/tasks/${task.id}/cancel`, { method: "POST", body: {} }); }
+  catch (error) { toast(error.message, "error"); }
 }
 
 async function exportImages(event) {
   event.preventDefault();
   const button = $("#confirm-export");
+  $$(".download-ready", $("#export-form")).forEach(element => element.remove());
+  resetExportProgress();
+  const run = state.exportRun;
   button.disabled = true;
-  button.textContent = "正在编码并生成文件…";
   try {
     const options = {
       format: $("#export-format").value,
@@ -512,19 +586,55 @@ async function exportImages(event) {
       dpi: Number($("#export-dpi").value),
     };
     const batch = state.exportIds.length > 1;
-    const body = batch ? { asset_ids: state.exportIds, options } : { asset_id: state.exportIds[0], options };
-    const result = await api(batch ? "/exports/archive" : "/exports", { method: "POST", body });
-    const link = document.createElement("a");
-    link.href = result.url;
-    link.download = result.download_name;
-    link.className = "button wide download-ready";
-    link.textContent = `下载已生成的文件 · ${humanBytes(result.bytes)}`;
-    $("#export-form").append(link);
-    link.click();
-    toast(`导出文件已生成 · ${humanBytes(result.bytes)}`);
+    if (!batch) {
+      button.textContent = "正在编码并生成文件…";
+      $("#export-progress").hidden = true;
+      const result = await api("/exports", { method: "POST", body: { asset_id: state.exportIds[0], options } });
+      downloadExport(result.url, result.download_name, `下载已生成的文件 · ${humanBytes(result.bytes)}`);
+      toast(`导出文件已生成 · ${humanBytes(result.bytes)}`);
+      return;
+    }
+    button.textContent = "正在准备压缩包…";
+    const task = await api("/exports/archive/tasks", { method: "POST", body: { asset_ids: state.exportIds, options } });
+    state.exportTask = task;
+    renderExportTask(task);
+    const final = await waitForExportTask(task, run);
+    if (final.stale) return;
+    if (final.status === "completed") {
+      renderExportTask(final);
+      $("#export-progress-label").textContent = final.message;
+      $("#export-progress-bar").style.width = "100%";
+      $("#export-cancel").hidden = true;
+      downloadExport(final.download_url, final.download_name || "光屿_批量导出.zip", `下载已生成的压缩包 · ${humanBytes(final.bytes)}`);
+      toast(`压缩包已准备完成 · ${humanBytes(final.bytes)}`);
+      state.exportTask = null;
+    } else if (final.status === "cancelled") {
+      showExportFailure("导出已取消；没有生成可下载的压缩包。");
+      toast("导出已取消", "info");
+      state.exportTask = null;
+    } else if (final.status === "interrupted") {
+      showExportFailure("导出准备被中断；没有生成可下载文件，请重新导出。");
+      state.exportTask = null;
+    } else {
+      const reason = final.status === "failed" && final.error?.code === "download_interrupted"
+        ? "下载连接中断，未完整交付的压缩包已清理"
+        : final.error?.message || final.message || "导出准备失败";
+      showExportFailure(`${reason}；请重新导出。`);
+      toast(reason, "error");
+      state.exportTask = null;
+    }
+  } catch (error) {
+    if (run === state.exportRun) {
+      showExportFailure(error.message);
+      toast(error.message, "error");
+    }
   } finally {
+    if (run !== state.exportRun) return;
     button.disabled = false;
     button.innerHTML = `${icon("download")}重新生成并下载`;
+    $("#export-cancel").disabled = false;
+    $("#export-cancel").hidden = false;
+    state.exportCancelling = false;
   }
 }
 
@@ -598,6 +708,13 @@ function bindEvents() {
   on("#export-button", "click", () => openExport([requireImage().id]));
   on("#export-form", "submit", exportImages);
   on("#export-quality", "input", event => { $("#quality-value").textContent = event.target.value; });
+  on("#export-cancel", "click", cancelExportTask);
+  $("#export-dialog").addEventListener("close", () => {
+    const task = state.exportTask;
+    if (task && !["completed", "failed", "cancelled", "interrupted"].includes(task.status)) {
+      api(`/exports/archive/tasks/${task.id}/cancel`, { method: "POST", body: {} }).catch(() => {});
+    }
+  });
   on("#select-all", "click", () => {
     if (state.assets.length && state.assets.every(asset => state.selected.has(asset.id))) {
       state.assets.forEach(asset => state.selected.delete(asset.id));
