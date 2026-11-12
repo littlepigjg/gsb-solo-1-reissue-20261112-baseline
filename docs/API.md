@@ -35,6 +35,13 @@
 | POST | `/exports` | 单图实际格式编码 |
 | POST | `/exports/archive` | 多图编码并生成 ZIP |
 | GET | `/exports/{id}/download` | 下载导出产物 |
+| GET | `/assets/{id}/annotations` | 读取批注文档（根坐标、撤销/重做状态） |
+| GET | `/assets/{id}/annotations/view` | 批注投影到当前画布后的渲染数据与可见性 |
+| POST | `/assets/{id}/annotations` | 新增一条批注，返回 201 |
+| PATCH | `/assets/{id}/annotations/{marker_id}` | 修改批注图形、颜色或说明 |
+| DELETE | `/assets/{id}/annotations/{marker_id}` | 删除单条批注 |
+| POST | `/assets/{id}/annotations/undo` | 撤销上一次批注变更 |
+| POST | `/assets/{id}/annotations/redo` | 重做已撤销的批注变更 |
 | GET | `/events` | 最近 100 条操作记录 |
 | GET | `/backup` | 下载完整 JSON 元数据快照 |
 
@@ -89,6 +96,26 @@
 ```
 
 支持 `PNG/JPEG/WEBP/BMP/TIFF/GIF`。响应的 `url` 可直接下载。ZIP 接口将 `asset_id` 改为 `asset_ids` 数组，压缩包中包含安全命名的图片和 `manifest.json`。
+
+导出选项可带 `"include_annotations": true`，此时在最终像素上叠加当前版本可见的批注（含画面外标记的虚线提示）；默认 `false`，导出纯净画面，批注永不修改原图像素。
+
+## 批注与坐标跟随
+
+每条批注以**原片（root image）像素坐标**持久化，类型为 `rect`、`ellipse`、`arrow`、`freehand`、`note`，公共字段为 `kind`、`label`、`color`、`line_width` 与类型相关的 `geometry`。
+
+每个素材记录携带 3×3 射影矩阵 `frame`，表示“当前画布坐标 → 原片坐标”。裁剪、缩放、旋转、翻转、斜切、平移、透视与扩展画布各自贡献一个矩阵并沿版本链复合；调色、滤镜等不移动像素的操作贡献恒等矩阵。`/annotations/view` 用矩阵的逆把根坐标批注投影回当前画布，并对每条标记给出 `inside/partial/outside` 可见性，从而区分仍在画面内、部分被裁出、完全在画面外（标记仍保留）的内容。
+
+```json
+{
+  "kind": "rect",
+  "label": "这里偏色",
+  "color": "#d9482b",
+  "line_width": 3,
+  "geometry": {"x": 120, "y": 90, "width": 60, "height": 60}
+}
+```
+
+批注文档按素材版本独立快照：处理生成新副本时复制父版本批注，但此后两个编辑分支互不可见、互不修改；旧版本与原片的批注保持可追溯。撤销/重做以整份标记快照实现并随 JSON 持久化，保存后重新打开仍可继续撤销。
 
 ## 状态码
 

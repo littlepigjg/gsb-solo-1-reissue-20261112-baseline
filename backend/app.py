@@ -16,6 +16,7 @@ from .analysis import AnalysisService
 from .presets import PresetService
 from .samples import SampleService
 from .diagnostics import DiagnosticsService
+from .annotations import AnnotationService
 from .errors import StudioError
 
 
@@ -25,9 +26,10 @@ def create_app(data_dir=None, testing=False):
     store = JsonStore(settings.database)
     registry = Registry()
     assets = AssetService(settings, store)
-    processing = ProcessingService(settings, store, assets, registry)
+    annotations = AnnotationService(store, assets)
+    processing = ProcessingService(settings, store, assets, registry, annotations)
     jobs = JobService(settings, store, assets, processing)
-    exports = ExportService(settings, store, assets, processing)
+    exports = ExportService(settings, store, assets, processing, annotations)
     presets = PresetService(store, registry)
     services = {
         "settings": settings,
@@ -38,6 +40,7 @@ def create_app(data_dir=None, testing=False):
         "jobs": jobs,
         "exports": exports,
         "presets": presets,
+        "annotations": annotations,
         "analysis": AnalysisService(assets),
         "samples": SampleService(assets, store),
         "diagnostics": DiagnosticsService(settings, store),

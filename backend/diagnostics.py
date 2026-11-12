@@ -64,6 +64,9 @@ class DiagnosticsService:
                 })
         for filename in missing_files:
             issues.append({"code": "missing_media", "filename": filename})
+        annotation_ids = {item["id"] for item in records["annotations"]}
+        for annotation_id in annotation_ids - asset_ids:
+            issues.append({"code": "orphan_annotation", "asset_id": annotation_id})
         disk_files = {path.name for path in self.settings.media.glob("*.png")}
         orphans = sorted(disk_files - tracked_files)
         for filename in orphans:

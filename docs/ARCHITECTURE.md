@@ -12,7 +12,8 @@ Flask 路由与错误边界
         ├── Registry ────── 参数协议 / 严格校验 / 算法注册
         ├── Processing ──── 有序执行 / 资源限制 / 新副本和溯源
         ├── JobService ──── 单工作线程 / 进度 / 取消 / 重启恢复
-        ├── ExportService ─ 实际格式编码 / ZIP 打包
+        ├── ExportService ─ 实际格式编码 / ZIP 打包 / 批注叠加
+        ├── AnnotationService ─ 根坐标批注 / 帧投影 / 撤销快照 / 分支隔离
         ├── Analysis ────── 采样直方图 / 色谱 / 误差分析
         ├── Presets ─────── 内置与自定义 JSON 流程
         └── Diagnostics ── 依赖与文件完整性检查
@@ -37,6 +38,17 @@ Flask 路由与错误边界
 
 `catalog/` 文件是运行时直接使用的 Python 源码，包含每个操作的描述、算法、参数类型、默认值、范围、步进、选项、帮助文本和示例请求。`scripts/generate_catalog.py` 是维护这些定义的编译工具。
 
+## 批注的坐标锚定与帧矩阵
+
+审图批注不能只存屏幕像素，否则裁剪或旋转后就失去指向。系统让每个素材保存一个 3×3 射影矩阵 `frame`，把该素材自身画布坐标映射回最初导入原片的坐标空间；标记本身只以原片坐标存一份。
+
+- `backend/frames.py` 提供齐次矩阵的构造、复合、求逆、点投影与单应拟合。
+- `backend/geometry_frames.py` 为 22 个几何操作分别给出“输出画布 → 输入画布”的单应：裁剪与平移是平移矩阵，缩放是对角矩阵，翻转/直角旋转是可逆仿射，自由旋转由中心旋转求逆，斜切直接采用 Pillow 的逆仿射系数，透视则让 Pillow 自身变换坐标图后再拟合单应，保证与真实像素同构。
+- 处理流水线在每个几何步骤后复合帧贡献，并与父版本的根帧相乘；非几何步骤贡献恒等矩阵。连续编辑后标记自动落在对应内容上，无需目测重放。
+- `AnnotationService` 用帧的逆把根坐标标记投影回当前画布，并按角点是否落在画布内标注 `inside/partial/outside`，被裁出画面的标记仍保留且以虚线区分。
+- 新处理副本通过 `fork` 获得父版本批注的独立快照：两个编辑分支此后各自维护标记与撤销历史，互不写入；旧版本与原片保持可追溯。撤销/重做保存完整标记快照，随 JSON 原子写入持久化。
+- 导出默认不渲染批注；显式 `include_annotations` 时由 `annotation_render.py` 在当前画布投影结果上叠加矢量风格标记，原图像素不被修改。
+
 ## 存储模型
 
 每个集合保存为：
@@ -52,7 +64,8 @@ Flask 路由与错误边界
 
 | 集合 | 主要字段 |
 | --- | --- |
-| assets | name、kind、width、height、sha256、parent_id、root_id、steps、metadata |
+| assets | name、kind、width、height、sha256、parent_id、root_id、steps、frame、metadata |
+| annotations | asset_id、markers、undo_stack、redo_stack（按素材版本一条文档） |
 | jobs | title、asset_ids、steps、status、progress、results、errors |
 | presets | name、description、steps、readonly、builtin_key |
 | events | action、message、details |

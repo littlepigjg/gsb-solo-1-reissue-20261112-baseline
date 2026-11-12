@@ -63,8 +63,9 @@ class AssetService:
         self.store.event("upload", f"导入 {name}", {"asset_id": record["id"]})
         return record
 
-    def save(self, image, name, kind="result", parent=None, steps=None, metadata=None):
+    def save(self, image, name, kind="result", parent=None, steps=None, metadata=None, frame=None):
         from .validation import dimension_guard
+        from .frames import IDENTITY
         dimension_guard(*image.size, self.settings)
         asset_id = new_id()
         path = self._file(asset_id)
@@ -97,6 +98,7 @@ class AssetService:
                     "favorite": False,
                     "tags": [],
                     "metadata": metadata or {},
+                    "frame": frame or {"matrix": [list(row) for row in IDENTITY], "warnings": []},
                 }
                 record = self.store.insert("assets", record)
                 return self.public(record)
@@ -149,6 +151,10 @@ class AssetService:
             if descendants:
                 raise Conflict("该图片有处理副本，请先删除其副本，以保留完整历史")
             self.store.delete("assets", asset_id)
+            try:
+                self.store.delete("annotations", asset_id)
+            except Exception:
+                pass
             self._file(asset_id).unlink(missing_ok=True)
             self._file(asset_id, True).unlink(missing_ok=True)
             self.store.event("delete", f"删除 {record['name']}")

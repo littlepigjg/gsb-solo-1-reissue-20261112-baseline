@@ -128,6 +128,41 @@ def asset_analysis(asset_id):
     return ok(service("analysis").inspect(asset_id))
 
 
+@api.get("/assets/<asset_id>/annotations")
+def annotation_list(asset_id):
+    return ok(service("annotations").get(asset_id))
+
+
+@api.get("/assets/<asset_id>/annotations/view")
+def annotation_view(asset_id):
+    return ok({"markers": service("annotations").markers_in_view(asset_id)})
+
+
+@api.post("/assets/<asset_id>/annotations")
+def annotation_add(asset_id):
+    return ok(service("annotations").add_marker(asset_id, payload()), 201)
+
+
+@api.patch("/assets/<asset_id>/annotations/<marker_id>")
+def annotation_update(asset_id, marker_id):
+    return ok(service("annotations").update_marker(asset_id, marker_id, payload()))
+
+
+@api.delete("/assets/<asset_id>/annotations/<marker_id>")
+def annotation_delete(asset_id, marker_id):
+    return ok(service("annotations").delete_marker(asset_id, marker_id))
+
+
+@api.post("/assets/<asset_id>/annotations/undo")
+def annotation_undo(asset_id):
+    return ok(service("annotations").undo(asset_id))
+
+
+@api.post("/assets/<asset_id>/annotations/redo")
+def annotation_redo(asset_id):
+    return ok(service("annotations").redo(asset_id))
+
+
 @api.post("/compare")
 def compare():
     data = payload({"first_id", "second_id"})

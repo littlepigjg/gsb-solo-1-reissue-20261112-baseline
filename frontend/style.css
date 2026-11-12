@@ -7,3 +7,105 @@
 @media(max-width:790px){.sidebar{width:70px;padding:22px 9px}.brand{padding:0;justify-content:center;margin-bottom:27px}.brand>span,.sidebar-section-title,.nav-item>.count,.nav-dot,.tool-item>span:last-child,.local-card,.system-button{display:none}.nav-item,.tool-item{font-size:0;gap:0;justify-content:center;padding:13px 8px}.nav-item .icon,.tool-item .icon{width:20px;height:20px}.tool-nav{margin-top:20px}.tool-item.active:before{left:-9px}.main{margin-left:70px}.topbar{height:64px}.connection{display:none}.editor-grid{grid-template-columns:minmax(0,1fr) 250px}.page-heading{gap:10px}.page-heading>.button{font-size:0;padding:10px}.page-heading>.button .icon{width:18px;height:18px}.page-heading h1{font-size:21px}.page-heading p{font-size:10px}.page-heading .eyebrow{font-size:7px;letter-spacing:1px}.canvas-area{height:350px;padding:17px}.file-heading strong{max-width:100px}.toolbar-buttons #fullscreen-button{display:none}.workspace-footnote>span:first-child{display:none}.canvas-toolbar{height:52px;padding:0 10px}.filmstrip{padding:0 12px 14px}.filmstrip-heading{padding:15px 12px 10px}.film-item{width:75px;height:57px}}
 @media(max-width:620px){.main{margin-left:57px}.sidebar{width:57px;padding:20px 6px}.brand-mark{width:29px}.brand{margin-bottom:20px}.nav-item,.tool-item{padding:11px 6px}.tool-nav{margin-top:13px}.tool-item .icon{width:18px;height:18px}.view{padding:22px 13px}.topbar{padding:0 13px;height:59px}.breadcrumb{font-size:10px;gap:8px}.topbar-actions .button{font-size:9px;padding:8px 10px}.editor-grid{grid-template-columns:1fr}.page-heading{margin-bottom:22px}.page-heading h1{font-size:20px;letter-spacing:0;margin:10px 0}.page-heading p{font-size:9px;letter-spacing:0}.page-heading .eyebrow{font-size:6px;letter-spacing:.8px}.canvas-area{height:340px;padding:24px}.canvas-toolbar{padding:0 14px}.file-heading strong{max-width:160px}.toolbar-buttons .button .icon{display:block}.toolbar-buttons #fullscreen-button{display:flex}.canvas-footer>div:last-child{display:flex;font-size:8px}.inspector-tabs{justify-content:space-around;gap:20px}.inspector-panel{padding:23px}.inspector-export{padding:20px 23px}.workspace-footnote{font-size:8px;justify-content:center;line-height:1.8}.asset-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.asset-card .asset-open{height:135px}.asset-card-info{padding:11px 9px}.asset-card-info h3{font-size:10px}.asset-card-info p{font-size:8px}.asset-card-actions{padding:0 9px 10px}.library-toolbar{padding:12px;gap:9px}.library-toolbar .search-field{flex-basis:100%}.library-toolbar>select{flex:1}.library-toolbar .button{font-size:9px;padding:7px 9px}.batch-compose,.job-history{padding:20px}.batch-layout{gap:16px}.batch-selection-head h2{font-size:13px}.toast-container{left:70px;right:13px;bottom:16px}.toast{font-size:11px;padding:12px 14px}.empty-state{padding:12px}.empty-state h2{font-size:14px}.empty-state small{font-size:8px}.filmstrip-heading{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ------------------------------------------------------------------ */
+/* 批注图层：框选、圈选与随内容移动的审阅标记                            */
+/* ------------------------------------------------------------------ */
+.annotation-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #f7faf2;
+}
+.annotation-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.anno-tool {
+  font-size: 10px;
+  padding: 7px 11px;
+  border: 1px solid #d6e0cb;
+  border-radius: 6px;
+  background: #fff;
+  color: #5c7152;
+}
+.anno-tool:hover { background: #eef4e6; }
+.anno-tool.active { background: var(--deep); color: #fff; border-color: var(--deep); }
+.annotation-style { display: flex; align-items: center; gap: 12px; font-size: 10px; color: #6f8263; }
+.annotation-style label { display: flex; align-items: center; gap: 6px; margin: 0; }
+.annotation-style input[type="color"] { width: 34px; height: 28px; padding: 2px; }
+.annotation-style input[type="range"] { width: 80px; }
+.anno-count { color: #93a185; white-space: nowrap; }
+.danger-text { color: #a4513c; }
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+}
+#annotation-svg {
+  overflow: visible;
+  touch-action: none;
+  pointer-events: auto;
+  cursor: crosshair;
+}
+.anno-shape { cursor: crosshair; }
+.anno-inside { opacity: 1; }
+.anno-partial { opacity: 0.95; }
+.anno-partial polygon, .anno-partial ellipse, .anno-partial polyline, .anno-partial line {
+  stroke-dasharray: 10 5;
+}
+.anno-outside { opacity: 0.55; }
+.anno-outside polygon, .anno-outside ellipse, .anno-outside polyline, .anno-outside line,
+.anno-outside circle {
+  stroke-dasharray: 4 5;
+}
+.anno-selected > polygon, .anno-selected > ellipse, .anno-selected > polyline,
+.anno-selected > line, .anno-selected > circle {
+  filter: drop-shadow(0 0 4px rgba(217, 72, 43, 0.55));
+}
+.anno-draft { pointer-events: none; }
+.anno-label-text {
+  font-size: 13px;
+  font-family: inherit;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.annotation-label-pop {
+  position: absolute;
+  z-index: 8;
+  width: 230px;
+  background: #fff;
+  border: 1px solid #cfdcc2;
+  border-radius: 9px;
+  padding: 11px;
+  box-shadow: 0 10px 30px rgba(30, 50, 36, 0.18);
+  pointer-events: auto;
+}
+.annotation-label-pop textarea { margin-bottom: 9px; resize: vertical; }
+.annotation-label-pop > div { display: flex; gap: 10px; align-items: center; }
+.annotation-legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 18px;
+  font-size: 9px;
+  color: #7d8c74;
+  border-top: 1px solid var(--line);
+  background: #fbfcf8;
+}
+.annotation-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.annotation-legend i { width: 18px; height: 0; border-top: 3px solid #d9482b; display: inline-block; }
+.legend-partial { border-top-style: dashed !important; }
+.legend-outside { border-top-style: dotted !important; opacity: 0.6; }
+.export-annotations { margin: 14px 0; }
+@media (max-width: 790px) {
+  .annotation-bar { padding: 8px 12px; gap: 8px; }
+  .anno-tool { padding: 6px 8px; font-size: 9px; }
+  .annotation-style { gap: 8px; }
+}

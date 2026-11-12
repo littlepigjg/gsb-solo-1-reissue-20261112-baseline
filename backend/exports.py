@@ -15,21 +15,23 @@ MIMETYPES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp", "BM
 
 
 class ExportService:
-    def __init__(self, settings, store, assets, processing):
+    def __init__(self, settings, store, assets, processing, annotations=None):
         self.settings = settings
         self.store = store
         self.assets = assets
         self.processing = processing
+        self.annotations = annotations
 
     def validate(self, options):
         object_value(options, "导出参数")
-        reject_unknown(options, {"format", "quality", "background", "lossless", "dpi"}, "导出参数")
+        reject_unknown(options, {"format", "quality", "background", "lossless", "dpi", "include_annotations"}, "导出参数")
         return {
             "format": choice_value(options.get("format", "PNG"), list(EXTENSIONS), "导出格式"),
             "quality": number_value(options.get("quality", 90), "质量", 1, 100, integer=True),
             "background": color_value(options.get("background", "#ffffff")),
             "lossless": boolean_value(options.get("lossless", False), "无损模式"),
             "dpi": number_value(options.get("dpi", 96), "DPI", 36, 1200, integer=True),
+            "include_annotations": boolean_value(options.get("include_annotations", False), "包含批注"),
         }
 
     def encode(self, image, options):
@@ -85,10 +87,20 @@ class ExportService:
         options = self.validate(options)
         with self.processing.compute_lock:
             image, asset = self.assets.load(asset_id)
+            if options["include_annotations"]:
+                image = self._compose_annotations(asset_id, image)
             payload = self.encode(image, options)
         extension = EXTENSIONS[options["format"]]
-        name = asset["name"].rsplit(".", 1)[0][:100] + "." + extension
+        suffix = " · 带批注" if options["include_annotations"] else ""
+        name = asset["name"].rsplit(".", 1)[0][:100] + suffix + "." + extension
         return self._save_file(payload, extension, name, [asset_id], options, "image")
+
+    def _compose_annotations(self, asset_id, image):
+        from .annotation_render import render_annotations
+        markers = self.annotations.markers_in_view(asset_id)
+        if not markers:
+            return image
+        return render_annotations(image, markers)
 
     def archive(self, asset_ids, options):
         asset_ids = list_value(asset_ids, "导出图片", maximum=self.settings.max_batch)
@@ -98,13 +110,23 @@ class ExportService:
         extension = EXTENSIONS[options["format"]]
         with self.processing.compute_lock:
             with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                annotation_summary = []
                 for index, asset_id in enumerate(asset_ids, start=1):
                     image, asset = self.assets.load(asset_id)
+                    if options["include_annotations"]:
+                        image = self._compose_annotations(asset_id, image)
                     payload = self.encode(image, options)
                     filename = f"{index:02d}_{asset_id[:8]}.{extension}"
                     archive.writestr(filename, payload)
+                    if options["include_annotations"]:
+                        annotation_summary.append({
+                            "asset_id": asset_id,
+                            "markers": len(self.annotations.markers_in_view(asset_id)),
+                        })
                 import json
                 manifest = {"options": options, "assets": asset_ids, "count": len(asset_ids)}
+                if annotation_summary:
+                    manifest["annotations"] = annotation_summary
                 archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         return self._save_file(buffer.getvalue(), "zip", "光屿_批量导出.zip", asset_ids, options, "archive")
 

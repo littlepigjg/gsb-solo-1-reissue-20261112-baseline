@@ -246,6 +246,9 @@ async function selectAsset(id, switchView = false) {
   if (token !== state.selectionToken) return;
   state.root = root;
   $("#original-image").src = root.url;
+  if (window.annotationController?.isActive()) {
+    window.annotationController.onAssetChanged();
+  }
   if (state.panel === "info") await loadAnalysis();
 }
 
@@ -256,6 +259,8 @@ function setComparison(enabled) {
   $("#comparison-labels").hidden = !enabled;
   $("#comparison-control").hidden = !enabled;
   $("#compare-button").setAttribute("aria-pressed", String(enabled));
+  // Markers annotate the current version, not the untouched original.
+  if (window.annotationController?.isActive()) $("#annotation-layer").hidden = enabled;
 }
 
 async function processSteps(steps) {
@@ -369,6 +374,7 @@ function confirmDelete(id) {
         $("#active-name").textContent = "尚未选择图片";
         $("#image-meta").textContent = "等待导入图片";
         setComparison(false);
+        if (window.annotationController?.isActive()) window.annotationController.setMode(false);
       }
       $("#confirm-dialog").close();
       await refreshLibrary();
@@ -510,6 +516,7 @@ async function exportImages(event) {
       background: $("#export-background").value,
       lossless: $("#export-lossless").checked,
       dpi: Number($("#export-dpi").value),
+      include_annotations: $("#export-annotations").checked,
     };
     const batch = state.exportIds.length > 1;
     const body = batch ? { asset_ids: state.exportIds, options } : { asset_id: state.exportIds[0], options };
@@ -646,6 +653,7 @@ function bindEvents() {
 
 async function bootstrap() {
   hydrateIcons();
+  window.annotationController?.bind();
   const [catalog, config, library, presets] = await Promise.all([api("/catalog"), api("/config"), api("/assets?limit=60"), api("/presets")]);
   Object.assign(state, { catalog, config, presets, assets: library.items, assetTotal: library.total });
   rememberAssets(library.items);

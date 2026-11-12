@@ -8,6 +8,7 @@
   <title>光屿 · 图像工作室</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/annotations.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -41,13 +42,30 @@
         <div class="page-heading"><div><div class="eyebrow">A LITTLE LIGHT. A NEW PERSPECTIVE.</div><h1>让每一帧，恰到好处<span>。</span></h1><p>从一次微调开始，让想象在画面里发生。</p></div><button id="demo-button" class="button subtle"><span data-icon="spark"></span>探索示例素材</button></div>
         <div class="editor-grid">
           <section class="canvas-panel" aria-label="图像预览">
-            <div class="canvas-toolbar"><div class="file-heading"><span data-icon="image"></span><strong id="active-name">尚未选择图片</strong><span id="active-kind" class="badge">原图</span></div><div class="toolbar-buttons"><button id="undo-button" class="icon-button" title="返回上一步" aria-label="返回上一步"><span data-icon="undo"></span></button><button id="compare-button" class="button tiny" aria-pressed="false"><span data-icon="compare"></span>原图对比</button><button id="fullscreen-button" class="icon-button" aria-label="全屏预览" title="全屏预览"><span data-icon="expand"></span></button></div></div>
+            <div class="canvas-toolbar"><div class="file-heading"><span data-icon="image"></span><strong id="active-name">尚未选择图片</strong><span id="active-kind" class="badge">原图</span></div><div class="toolbar-buttons"><button id="annotation-toggle" class="button tiny" aria-pressed="false"><span data-icon="type"></span>批注</button><button id="annotation-undo" class="icon-button" title="撤销批注" aria-label="撤销批注" disabled>↶</button><button id="annotation-redo" class="icon-button" title="重做批注" aria-label="重做批注" disabled>↷</button><button id="undo-button" class="icon-button" title="返回上一步" aria-label="返回上一步"><span data-icon="undo"></span></button><button id="compare-button" class="button tiny" aria-pressed="false"><span data-icon="compare"></span>原图对比</button><button id="fullscreen-button" class="icon-button" aria-label="全屏预览" title="全屏预览"><span data-icon="expand"></span></button></div></div>
+            <div id="annotation-bar" class="annotation-bar" hidden>
+              <div class="annotation-tools" role="group" aria-label="批注工具">
+                <button class="anno-tool active" data-anno-tool="rect" title="矩形框选">▭ 框选</button>
+                <button class="anno-tool" data-anno-tool="ellipse" title="圆形圈出">◯ 圈出</button>
+                <button class="anno-tool" data-anno-tool="arrow" title="箭头">↗ 箭头</button>
+                <button class="anno-tool" data-anno-tool="freehand" title="自由绘制">✎ 手绘</button>
+                <button class="anno-tool" data-anno-tool="note" title="文字便签">❝ 便签</button>
+                <button class="anno-tool" data-anno-tool="select" title="选择/编辑">☰ 选择</button>
+              </div>
+              <div class="annotation-style">
+                <label>颜色<input type="color" id="anno-color" value="#d9482b"></label>
+                <label>线宽<input type="range" id="anno-width" min="1" max="12" value="3"></label>
+                <button id="anno-delete-selected" class="text-button danger-text" disabled>删除选中</button>
+                <span id="anno-count" class="anno-count">0 条批注</span>
+              </div>
+            </div>
             <div id="canvas-area" class="canvas-area">
               <div class="canvas-corner tl"></div><div class="canvas-corner tr"></div><div class="canvas-corner bl"></div><div class="canvas-corner br"></div>
               <div id="empty-state" class="empty-state"><div class="empty-icon" data-icon="image"></div><h2>你的下一幅作品，从这里开始</h2><p>拖入图片，或选择本地文件</p><button id="empty-upload" class="button dark">选择图片</button><small>PNG / JPG / WebP / BMP / TIFF / GIF · 最大 24 MB</small></div>
-              <div id="image-stage" class="image-stage" hidden><img id="preview-image" alt="当前图像处理结果"><div id="original-layer" class="original-layer" hidden><img id="original-image" alt="最初导入的原图"></div><div id="comparison-line" class="comparison-line" hidden><span>↔</span></div><div id="comparison-labels" class="comparison-labels" hidden><span>原图</span><span>当前结果</span></div></div>
+              <div id="image-stage" class="image-stage" hidden><img id="preview-image" alt="当前图像处理结果"><div id="annotation-layer" class="annotation-layer" hidden><svg id="annotation-svg" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"></svg><div id="annotation-label-pop" class="annotation-label-pop" hidden><textarea id="annotation-label-input" rows="2" maxlength="500" placeholder="写说明（可选）"></textarea><div><button id="annotation-label-ok" class="button dark small">确定</button><button id="annotation-label-skip" class="text-button">跳过</button></div></div></div><div id="original-layer" class="original-layer" hidden><img id="original-image" alt="最初导入的原图"></div><div id="comparison-line" class="comparison-line" hidden><span>↔</span></div><div id="comparison-labels" class="comparison-labels" hidden><span>原图</span><span>当前结果</span></div></div>
               <div id="canvas-busy" class="canvas-busy" hidden><span class="spinner"></span><strong>正在处理画面</strong><small>完成后将保留一个新的处理副本</small></div>
             </div>
+            <div id="annotation-legend" class="annotation-legend" hidden><span><i class="legend-inside"></i>在画面内</span><span><i class="legend-partial"></i>部分被裁出</span><span><i class="legend-outside"></i>已在画面外（仍保留）</span></div>
             <div id="comparison-control" class="comparison-control" hidden><label for="comparison-range">原图</label><input id="comparison-range" type="range" min="0" max="100" value="50" aria-label="原图对比位置"><span>处理结果</span></div>
             <div class="canvas-footer"><div id="image-meta">等待导入图片</div><div><span class="tiny-dot"></span><span id="save-status">原图始终保留</span><span class="divider">|</span><span>适应画布</span></div></div>
             <div class="filmstrip-heading"><span>最近的画面</span><button id="show-library" class="text-button">查看素材库 <span>↗</span></button></div>
@@ -97,7 +115,7 @@
   <div id="drop-overlay" class="drop-overlay" hidden><span data-icon="upload"></span><h2>松开鼠标，导入你的画面</h2><p>文件仅保存在本机</p></div>
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-  <dialog id="export-dialog"><form id="export-form"><div class="dialog-heading"><div><div class="eyebrow">READY TO SHARE</div><h2>把作品带走</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div><p id="export-target" class="muted"></p><div class="two-fields"><label>文件格式<select id="export-format"><option>PNG</option><option>JPEG</option><option>WEBP</option><option>BMP</option><option>TIFF</option><option>GIF</option></select></label><label>输出 DPI<input id="export-dpi" type="number" min="36" max="1200" value="96"></label></div><label class="export-quality">编码质量 <output id="quality-value">90</output><input id="export-quality" type="range" min="1" max="100" value="90"></label><div class="two-fields"><label>透明区域填充色<input id="export-background" type="color" value="#ffffff"></label><label class="checkbox-label"><input id="export-lossless" type="checkbox">WebP 无损模式</label></div><p class="muted">PNG / WebP / TIFF 可保留透明通道；JPEG / BMP / GIF 将透明区域合成到背景色。GIF 导出为静态单帧。</p><button id="confirm-export" class="button dark wide" type="submit"><span data-icon="download"></span>生成并下载</button></form></dialog>
+  <dialog id="export-dialog"><form id="export-form"><div class="dialog-heading"><div><div class="eyebrow">READY TO SHARE</div><h2>把作品带走</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div><p id="export-target" class="muted"></p><div class="two-fields"><label>文件格式<select id="export-format"><option>PNG</option><option>JPEG</option><option>WEBP</option><option>BMP</option><option>TIFF</option><option>GIF</option></select></label><label>输出 DPI<input id="export-dpi" type="number" min="36" max="1200" value="96"></label></div><label class="export-quality">编码质量 <output id="quality-value">90</output><input id="export-quality" type="range" min="1" max="100" value="90"></label><div class="two-fields"><label>透明区域填充色<input id="export-background" type="color" value="#ffffff"></label><label class="checkbox-label"><input id="export-lossless" type="checkbox">WebP 无损模式</label></div><label class="checkbox-label export-annotations"><input id="export-annotations" type="checkbox">导出时叠加批注标记（不勾选则导出纯净画面）</label><p class="muted">PNG / WebP / TIFF 可保留透明通道；JPEG / BMP / GIF 将透明区域合成到背景色。GIF 导出为静态单帧。批注以独立图层保存，不修改原图像素。</p><button id="confirm-export" class="button dark wide" type="submit"><span data-icon="download"></span>生成并下载</button></form></dialog>
   <dialog id="preset-dialog"><form id="preset-form"><div class="dialog-heading"><h2>保存这份创作流程</h2><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div><label>预设名称<input id="preset-name" required maxlength="80" placeholder="例如：午后胶片"></label><label>简短说明<textarea id="preset-description" maxlength="300" rows="3" placeholder="记录这份流程适合的场景"></textarea></label><button class="button dark wide" type="submit">保存预设</button></form></dialog>
   <dialog id="system-dialog"><div class="dialog-heading"><h2>系统与数据</h2><button class="icon-button close-dialog" aria-label="关闭">×</button></div><div id="system-content"></div><a class="button outline wide" href="/api/backup" download>下载 JSON 元数据备份</a><p class="muted">元数据备份不包含图片文件。完整备份请复制项目的 data 文件夹。</p></dialog>
   <dialog id="confirm-dialog"><div class="dialog-heading"><h2 id="confirm-title">删除素材</h2><button class="icon-button close-dialog" aria-label="关闭">×</button></div><p id="confirm-message"></p><div class="dialog-actions"><button class="button subtle close-dialog">取消</button><button id="confirm-action" class="button danger">确认删除</button></div></dialog>

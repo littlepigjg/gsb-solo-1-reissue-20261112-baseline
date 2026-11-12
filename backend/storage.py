@@ -23,7 +23,7 @@ def new_id():
 
 
 class JsonStore:
-    COLLECTIONS = {"assets", "jobs", "presets", "events", "exports"}
+    COLLECTIONS = {"assets", "jobs", "presets", "events", "exports", "annotations"}
 
     def __init__(self, directory):
         self.directory = directory
